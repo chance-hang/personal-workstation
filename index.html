@@ -8845,8 +8845,9 @@ renderAll();
 /* 云同步初始化 */
 renderSyncBtn();
 (function initSync(){
-  const p=currentProfile();
-  if(TEST_BUILD||!p||!p.binId){setSyncStatus('off');return;}
+  let p=currentProfile();
+  if(!p||!p.binId){p=DEFAULT_PROFILE;syncProfiles=[p];currentProfileId=p.id;saveProfiles();}
+  if(TEST_BUILD){setSyncStatus('off');return;}
   /* 监听一次：仅在已登录（含 passcode）时实际同步，未登录自动 no-op */
   setInterval(()=>{if(navigator.onLine&&syncActive())cloudPull()},60000);
   window.addEventListener('online',()=>{if(syncActive()){cloudPull();schedulePush();}});
