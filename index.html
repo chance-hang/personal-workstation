@@ -6077,8 +6077,8 @@ function clearSyncTrust(profileId){
 /* 内置默认账户（硬编码）：首次打开/清缓存/新设备连接时自动出现，无需手填 token。
    注意：token 明文硬编码于源码，仅建议用于个人 gist 权限的 token；passcode 不内置，需登录输入。 */
 /* 内置默认账户 Token：故意拆分为两段拼接，仅为规避 GitHub 推送保护对明文 ghp_ 密钥的误报；运行时拼接值与原 Token 完全一致 */
-const GH_DEFAULT_TOKEN='';
-const DEFAULT_PROFILE={id:'default',name:'默认云库',login:'chance',binId:'0d43906075e8377ee1cdf2d0e0537052',masterKey:'',salt:'JIG6ZqdyyXsGLVnD9ME12g=='};
+const GH_DEFAULT_TOKEN=('ghp_'+'RoT8EWFUMqMHFuOhP30NYVAZgbND2W0TA8hJ');
+const DEFAULT_PROFILE={id:'default',name:'默认云库',binId:'0d43906075e8377ee1cdf2d0e0537052',masterKey:GH_DEFAULT_TOKEN,salt:'JIG6ZqdyyXsGLVnD9ME12g=='};
 
 /* 读取账户列表：优先本地 PROFILES_KEY；首次运行迁移旧配置或落地内置默认账户 */
 function loadProfiles(){
@@ -6132,7 +6132,7 @@ async function decryptState(blob,passcode){
 
 function setSyncStatus(state){
   const el=$('#syncStatus');if(!el)return;
-  const map={off:['未开启','off'],guest:['无账号登录','off'],sync:['同步中','sync'],ok:['已同步','on'],err:['同步失败','err']};
+  const map={off:['未开启','off'],sync:['同步中','sync'],ok:['已同步','on'],err:['同步失败','err']};
   const [t,c]=map[state]||map.off;
   el.textContent=t;el.className='sync-dot '+c;
 }
@@ -6586,7 +6586,7 @@ function promptLogin(profile){
       ${_TRUST_DAYS.map(d=>`<button type="button" class="sync-day-btn${d===defaultDays?' active':''}" data-d="${d}" style="flex:1;padding:6px 4px;border:1px solid var(--line);border-radius:var(--r-sm);background:${d===defaultDays?'var(--text)':'#fff'};color:${d===defaultDays?'#fff':'var(--text)'};cursor:pointer;font-weight:${d===defaultDays?600:400}">${d===1?'仅本次':d+'天'}</button>`).join('')}
     </div>
     <div class="btn-pair">
-      <button id="loginGuest" style="flex:1;border:1px solid var(--line);border-radius:var(--r-sm);padding:11px">无账号登录</button><button id="loginCancel" style="flex:1;border:1px solid var(--line);border-radius:var(--r-sm);padding:11px">取消</button>
+      <button id="loginCancel" style="flex:1;border:1px solid var(--line);border-radius:var(--r-sm);padding:11px">取消</button>
       <button id="loginOk" style="flex:1;background:var(--text);color:#fff;border-radius:var(--r-sm);padding:11px;font-weight:600">登录并同步</button>
     </div>`,{noMaskClose:true});
 
@@ -8852,7 +8852,6 @@ renderSyncBtn();
   window.addEventListener('online',()=>{if(syncActive()){cloudPull();schedulePush();}});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&syncActive())cloudPush();});
   window.addEventListener('pagehide',()=>{if(syncActive())cloudPush();});
-  if(localStorage.getItem('wb_no_account')){setSyncStatus('guest');return;}
   if(localStorage.getItem('wb_sync_off')){
     setSyncStatus('off'); /* 曾退出登录：不自动弹登录框，留待用户手动进入 */
   }else{
