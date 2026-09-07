@@ -6178,7 +6178,7 @@ async function decryptState(blob,passcode){
 function setSyncStatus(state){
   if(TEST_BUILD){const e=$('#syncStatus');if(e){e.textContent='禁用';e.className='sync-dot off';}return;}
   const el=$('#syncStatus');if(!el)return;
-  const map={off:['未开启','off'],sync:['同步中','sync'],ok:['已同步','on'],err:['同步失败','err']};
+  const map={off:['未开启','off'],guest:['无账号登录','off'],sync:['同步中','sync'],ok:['已同步','on'],err:['同步失败','err']};
   const [t,c]=map[state]||map.off;
   el.textContent=t;el.className='sync-dot '+c;
 }
@@ -6493,7 +6493,7 @@ async function loginToProfile(profile,passcode,opts={}){
   currentProfileId=profile.id;saveProfiles();
   try{
     if(!await cloudPull({force:switching,throwOnError:true}))throw new Error('同步未完成，请稍后重试');
-    localStorage.removeItem('wb_sync_off');
+    localStorage.removeItem('wb_sync_off');localStorage.removeItem('wb_no_account');
     setSyncStatus('ok');renderSyncBtn();
     return true;
   }catch(e){
@@ -6528,7 +6528,7 @@ function promptLogin(profile){
     </div>
     <div class="btn-pair">
       <button id="loginCancel" style="flex:1;border:1px solid var(--line);border-radius:var(--r-sm);padding:11px">取消</button>
-      <button id="loginOk" style="flex:1;background:var(--text);color:#fff;border-radius:var(--r-sm);padding:11px;font-weight:600">登录并同步</button>
+      <button id="loginGuest" style="flex:1;border:1px solid var(--line);border-radius:var(--r-sm);padding:11px">无账号登录</button><button id="loginOk" style="flex:1;background:var(--text);color:#fff;border-radius:var(--r-sm);padding:11px;font-weight:600">登录并同步</button>
     </div>`,{noMaskClose:true});
 
   /* 信任天数选择 + 主开关联动 */
@@ -6700,7 +6700,7 @@ function addAccount(){
       }else{
         await cloudPull({force:true,throwOnError:true});
       }
-      localStorage.removeItem('wb_sync_off');
+      localStorage.removeItem('wb_sync_off');localStorage.removeItem('wb_no_account');
       setSyncStatus('ok');renderSyncBtn();toast('账户已添加并登录');
     }catch(e){
       sessionPasscode=null;setSyncStatus('off');renderSyncBtn();
@@ -8745,6 +8745,7 @@ renderSyncBtn();
   window.addEventListener('online',()=>{if(syncActive()){cloudPull();schedulePush();}});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&syncActive())cloudPush();});
   window.addEventListener('pagehide',()=>{if(syncActive())cloudPush();});
+  if(localStorage.getItem('wb_no_account')){setSyncStatus('guest');return;}
   if(localStorage.getItem('wb_sync_off')){
     setSyncStatus('off'); /* 曾退出登录：不自动弹登录框，留待用户手动进入 */
   }else{
