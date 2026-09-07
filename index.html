@@ -6605,7 +6605,7 @@ function renderAccountManager(){
   modal(`<h4>云同步 · 账户管理<span class="modal-close" onclick="closeModal()">×</span></h4>
     ${curCard}
     <div class="acc-list">${rows}</div>
-    <button id="addAccBtn" class="acc-add">+ 新增账户</button>
+    <button id="addAccBtn" class="acc-add">+ 新增账户</button>${cur&&!loggedIn?`<button id="loginCurrentBtn" class="acc-add" style="margin-top:8px;background:var(--text);color:#fff">登录当前账户</button>`:''}
     <div class="btn-pair" style="margin-top:14px">
       <button id="syncNowBtn" style="flex:1;background:var(--text);color:#fff;border-radius:var(--r-sm);padding:10px;font-weight:600" ${loggedIn?'':'disabled'}>立即同步</button>
       <button id="syncHistoryBtn" class="acc-btn" ${loggedIn?'':'disabled'}>历史版本恢复</button>
