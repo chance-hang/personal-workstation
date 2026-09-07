@@ -8852,7 +8852,8 @@ renderSyncBtn();
   window.addEventListener('online',()=>{if(syncActive()){cloudPull();schedulePush();}});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&syncActive())cloudPush();});
   window.addEventListener('pagehide',()=>{if(syncActive())cloudPush();});
-  if(localStorage.getItem('wb_no_account')){setSyncStatus('guest');return;}\n  if(localStorage.getItem('wb_sync_off')){
+  if(localStorage.getItem('wb_no_account')){setSyncStatus('guest');return;}
+  if(localStorage.getItem('wb_sync_off')){
     setSyncStatus('off'); /* 曾退出登录：不自动弹登录框，留待用户手动进入 */
   }else{
     /* v3.17 信任本设备 N 天免输入：先尝试用本地加密缓存的 Passcode 无感登录 */
