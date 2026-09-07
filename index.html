@@ -8738,7 +8738,7 @@ renderSyncBtn();
   await storageInitialization;
   if(loadIssue){setSyncStatus('err');return;}
   const p=currentProfile();
-  if(TEST_BUILD||!p||!p.binId){setSyncStatus('off');return;}
+  if(TEST_BUILD){setSyncStatus('off');return;}\n  if(!p||!p.binId){setSyncStatus('off');setTimeout(()=>renderAccountManager(),0);return;}
   /* 监听一次：仅在已登录（含 passcode）时实际同步，未登录自动 no-op */
   setInterval(()=>{if(navigator.onLine&&syncActive())cloudPull()},60000);
   window.addEventListener('online',()=>{if(syncActive()){cloudPull();schedulePush();}});
