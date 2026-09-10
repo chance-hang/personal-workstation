@@ -8,8 +8,8 @@ Idle
 
 ## 仓库角色
 
-- 当前仓库：`hb27bp49vk-source/personal-workstation`（Prod）
-- 对应 Test：`hb27bp49vk-source/personal-workstation-test`
+- 当前仓库：`chance-hang/personal-workstation`（Prod）
+- 对应 Test：`chance-hang/personal-workstation-test`
 
 本地 Prod Workspace 约定：
 

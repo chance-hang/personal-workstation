@@ -4,8 +4,8 @@
 
 这是“个人工作台”的正式版（Prod）仓库。
 
-GitHub：`hb27bp49vk-source/personal-workstation`
-对应 Test：`hb27bp49vk-source/personal-workstation-test`
+GitHub：`chance-hang/personal-workstation`
+对应 Test：`chance-hang/personal-workstation-test`
 
 本仓库是正式发布区域，不作为日常功能开发入口。
 
@@ -22,8 +22,8 @@ GitHub：`hb27bp49vk-source/personal-workstation`
 
 当前本地 Prod 工作区应配置：
 
-- `origin` → `hb27bp49vk-source/personal-workstation`
-- `test` → `hb27bp49vk-source/personal-workstation-test`
+- `origin` → `chance-hang/personal-workstation`
+- `test` → `chance-hang/personal-workstation-test`
 
 需要读取 Test 已验收版本时，通过：
 
