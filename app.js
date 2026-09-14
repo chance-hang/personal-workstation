@@ -4551,7 +4551,9 @@ function importQuickNotes(p){
 const SYNC_KEY='lifeworkbench_sync';                 /* 旧版单配置键，仅用于首次迁移 */
 const PROFILES_KEY='lifeworkbench_sync_profiles';
 const CURRENT_PROFILE_KEY='lifeworkbench_sync_current';
-const GITHUB_API='https://api.github.com/gists';
+/* 本地验收隔离：只有显式带 ?mockSync=1 才切换到本机 Mock 云端，默认仍使用 Prod Gist。 */
+const MOCK_SYNC=new URLSearchParams(location.search).get('mockSync')==='1';
+const GITHUB_API=MOCK_SYNC?'/__mock_gists':'https://api.github.com/gists';
 const GH_HEADERS=(token)=>({'Authorization':'token '+token,'Accept':'application/vnd.github+json','Content-Type':'application/json'});
 let syncProfiles=[];        /* 账户列表 [{id,name,binId,masterKey,salt}]，不含 passcode */
 let currentProfileId=null;  /* 当前选中账户 id */
