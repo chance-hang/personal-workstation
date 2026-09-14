@@ -7497,6 +7497,12 @@ renderSyncBtn();
   window.addEventListener('online',()=>{if(syncActive()){cloudPull();schedulePush();}});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&syncActive())cloudPush();});
   window.addEventListener('pagehide',()=>{if(syncActive())cloudPush();});
+  if(MOCK_SYNC){
+    /* 本地验收不模拟正式登录：刷新后自动进入隔离 Mock 会话，避免反复输入密码。 */
+    sessionPasscode='local-mock-acceptance';
+    (async()=>{try{await loginToProfile(p,sessionPasscode,{silent:true});setSyncStatus('ok');renderSyncBtn();}catch(e){setSyncStatus('err');console.warn('mock auto-login failed',e.message);}})();
+    return;
+  }
   if(false){ /* always show chance login on refresh unless user explicitly uses guest mode */
     setSyncStatus('off'); /* 曾退出登录：不自动弹登录框，留待用户手动进入 */
   }else{
