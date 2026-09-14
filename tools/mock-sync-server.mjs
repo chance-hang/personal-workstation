@@ -3,7 +3,7 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import { extname, join } from 'node:path';
 
 const root = process.cwd();
-const gistId = '0d43906075e8377ee1cdf2d0e0537052';
+const gistId = 'local-mock';
 const mock = { content: null, version: 0 };
 
 function send(res, status, body, headers = {}) {
