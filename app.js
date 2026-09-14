@@ -2637,6 +2637,10 @@ function load(){
     if(!d)return structuredClone(DEFAULT);
     if(!d.worklog)d.worklog=[];
     if(!d.notes)d.notes=[];
+    d.notes=d.notes.map(note=>{
+      if(note&&typeof note==='object'&&!('done' in note))note.done='completed' in note?Boolean(note.completed):false;
+      return note;
+    });
     if(!d.countdowns)d.countdowns=[];
     if(!d.moods)d.moods={};
     if(!d.habits)d.habits=[];
@@ -4081,7 +4085,7 @@ function noteTitle(text){
   const first=(text||'').split('\n').map(x=>x.trim()).find(Boolean)||'无内容';
   return first.length>28?first.slice(0,28)+'…':first;
 }
-function noteTime(){return fmtDate(new Date())+' '+new Date().toTimeString().slice(0,5)}
+function noteTime(){return new Date().toISOString()}
 function normalizeNote(n){
   if(!('done' in n))n.done=false;
   if(!n.content&&n.title)n.content=n.title;
@@ -4734,6 +4738,60 @@ function schedulePushRetry(){
   syncRetryTimer=setTimeout(cloudPush,delay);
 }
 
+function noteUpdatedAt(value){
+  const timestamp=number=>{
+    if(!Number.isFinite(number))return null;
+    const milliseconds=Math.abs(number)<100000000000?number*1000:number;
+    return Number.isFinite(new Date(milliseconds).getTime())?milliseconds:null;
+  };
+  if(typeof value==='number')return timestamp(value);
+  if(typeof value!=='string')return null;
+  const numeric=Number(value);if(value.trim()&&Number.isFinite(numeric))return timestamp(numeric);
+  if(/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/i.test(value)){const iso=Date.parse(value);return Number.isFinite(iso)?iso:null;}
+  const match=value.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?$/);
+  if(!match)return null;
+  const [,year,month,day,hour='0',minute='0',second='0',millisecond='0']=match;
+  const stamp=Date.UTC(+year,+month-1,+day,+hour,+minute,+second,millisecond.padEnd(3,'0'));
+  const date=new Date(stamp);
+  return date.getUTCFullYear()===+year&&date.getUTCMonth()===+month-1&&date.getUTCDate()===+day&&date.getUTCHours()===+hour&&date.getUTCMinutes()===+minute&&date.getUTCSeconds()===+second?stamp:null;
+}
+function normalizeNoteRecord(note){
+  const result=Object.assign({},note);
+  if(!('done' in result))result.done='completed' in result?Boolean(result.completed):false;
+  return result;
+}
+function stableNote(value){
+  const sort=x=>x&&typeof x==='object'&&!Array.isArray(x)?Object.fromEntries(Object.keys(x).sort().map(k=>[k,sort(x[k])])):Array.isArray(x)?x.map(sort):x;
+  return JSON.stringify(sort(value));
+}
+function mergeNotesByUpdatedAt(local,remote){
+  const map=new Map(),choose=(a,b)=>{
+    const at=noteUpdatedAt(a.updatedAt),bt=noteUpdatedAt(b.updatedAt);
+    if(at!==null&&bt!==null&&at!==bt)return at>bt?a:b;
+    if(at!==null&&bt===null)return a;
+    if(at===null&&bt!==null)return b;
+    return stableNote(a)<=stableNote(b)?a:b;
+  };
+  (local||[]).forEach(note=>{if(note&&note.id)map.set(note.id,normalizeNoteRecord(note));});
+  (remote||[]).forEach(note=>{if(!note||!note.id)return;const normalized=normalizeNoteRecord(note);map.set(note.id,map.has(note.id)?choose(map.get(note.id),normalized):normalized);});
+  return [...map.values()];
+}
+function runProdNoteMergeChecks(){
+  const results=[],test=(name,fn)=>{try{if(!fn())throw Error('结果不符');results.push({name,ok:true});}catch(e){results.push({name,ok:false,error:e.message});}};
+  const note=(id,done,updatedAt,extra={})=>Object.assign({id,title:'备忘',content:'正文',done,updatedAt},extra);
+  const one=(a,b)=>mergeNotesByUpdatedAt([a],[b])[0];
+  test('新 true 覆盖旧 false',()=>one(note('n',false,'2026-09-14T02:00:00.000Z'),note('n',true,'2026-09-14T03:00:00.000Z')).done===true);
+  test('新 false 覆盖旧 true',()=>one(note('n',true,'2026-09-14T02:00:00.000Z'),note('n',false,'2026-09-14T03:00:00.000Z')).done===false);
+  test('相同时间双向合并一致',()=>stableNote(one(note('n',false,'2026-09-14T03:00:00.000Z',{content:'甲'}),note('n',true,'2026-09-14T03:00:00.000Z',{content:'乙'})))===stableNote(one(note('n',true,'2026-09-14T03:00:00.000Z',{content:'乙'}),note('n',false,'2026-09-14T03:00:00.000Z',{content:'甲'}))));
+  test('ISO offset 按真实先后比较',()=>one(note('n',false,'2026-09-14T10:00:00+08:00'),note('n',true,'2026-09-14T03:00:00Z')).done===true);
+  test('Unix 秒与毫秒可解析',()=>noteUpdatedAt(1726275600)===1726275600000&&noteUpdatedAt(1726275600000)===1726275600000);
+  test('legacy 时间可解析',()=>noteUpdatedAt('2026-09-14 10:00:00.123')!==null);
+  test('completed 迁移为 done',()=>mergeNotesByUpdatedAt([],[{id:'legacy',content:'旧备忘',completed:true}])[0].done===true);
+  test('不同 ID 保持并集',()=>mergeNotesByUpdatedAt([note('a',false,'2026-09-14T02:00:00Z')],[note('b',true,'2026-09-14T03:00:00Z')]).length===2);
+  const before=S;try{S={todos:[{id:'local',text:'本地'}],notes:[],habits:[],ledger:[],quickNotes:[],countdowns:[],worklog:[],learning:{directions:[],contents:[],plans:[],questions:[],reviews:[],mistakes:[],selftests:[]}};mergeState({todos:[{id:'remote',text:'远端'}]});test('非 notes 维持原 ID 并集',()=>S.todos.length===2&&S.todos.some(x=>x.id==='local')&&S.todos.some(x=>x.id==='remote'));}finally{S=before;}
+  return results;
+}
+
 /* 按 id 合并本地与云端：本地已有记录永不删除，只补回云端有而本地没有的记录
    —— 根治原 last-write-wins 整覆盖导致跨设备丢数据的问题（如某笔账本地未上云被云端旧版本覆盖） */
 function mergeState(remote){
@@ -4794,7 +4852,9 @@ function mergeState(remote){
     remote.quickNotes.forEach(n=>{if(n&&!qnSet.has(n)){qnSet.add(n);changed=true;}});
     S.quickNotes=[...qnSet];
   }
-  S.notes=unionArr(S.notes,remote.notes);
+  const mergedNotes=mergeNotesByUpdatedAt(S.notes,remote.notes);
+  if(stableNote(mergedNotes)!==stableNote(S.notes||[]))changed=true;
+  S.notes=mergedNotes;
   S.countdowns=unionArr(S.countdowns,remote.countdowns);
   S.worklog=unionArr(S.worklog,remote.worklog);
   if(remote.learning&&S.learning){
