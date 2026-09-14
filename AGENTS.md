@@ -5,16 +5,16 @@
 这是“个人工作台”的正式版（Prod）仓库。
 
 GitHub：`chance-hang/personal-workstation`
-对应 Test：`chance-hang/personal-workstation-test`
+验收入口：本 Prod 仓库的临时 `review/*` 分支与本地 Mock 云同步。
 
 本仓库是正式发布区域，不作为日常功能开发入口。
 
 ## 核心规则
 
-1. 常规功能开发只在 Test 仓库进行。
-2. Prod 不独立重新实现 Test 已完成的功能。
-3. 只有经过 ChatGPT Review 和人工验收的 Test 版本，才允许发布到 Prod。
-4. 发布时必须明确来源 Test commit / 分支与允许同步范围。
+1. 日常变更从 Prod `main` 创建临时 `review/*` 分支。
+2. Review 分支只能使用本地 Mock 云同步验收，不连接正式 Gist。
+3. 只有经过 ChatGPT Review 和人工验收的 review 版本，才允许发布到 Prod `main`。
+4. 发布时必须明确 review commit / 分支与允许同步范围。
 5. 环境专属行为必须保留，禁止无脑覆盖。
 6. 除非 `docs/ACTIVE_TASK.md` 明确授权，不要修改正式业务代码。
 
@@ -23,15 +23,9 @@ GitHub：`chance-hang/personal-workstation`
 当前本地 Prod 工作区应配置：
 
 - `origin` → `chance-hang/personal-workstation`
-- `test` → `chance-hang/personal-workstation-test`
+不再配置或读取 Test remote；验收以当前 Prod review 分支和本地 Mock 服务为准。
 
-需要读取 Test 已验收版本时，通过：
-
-`git fetch test`
-
-获取 `test/main` 或指定 Test commit。
-
-不要通过父目录跨 Workspace 直接操作另一个仓库。
+不要通过父目录跨 Workspace 直接操作其他仓库。
 
 ## 开始任务前
 
@@ -45,7 +39,7 @@ GitHub：`chance-hang/personal-workstation`
 
 - 检查当前仓库和分支
 - `git fetch origin`
-- 如任务涉及 Test 来源，执行 `git fetch test`
+- 如任务涉及 review 来源，确认当前 review 分支与 `origin` 记录一致
 - 检查 `git status`
 - 如果工作区不干净，停止并汇报，不自动清理
 
