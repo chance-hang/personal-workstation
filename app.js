@@ -4587,7 +4587,7 @@ async function _aesGcmDec(keyBytes,ctB64,ivB64){
 }
 function _loadAllTrust(){try{const raw=localStorage.getItem(TRUST_STORE_NAME);if(raw){const o=JSON.parse(raw);if(o&&typeof o==='object')return o;}}catch(e){}return {};}
 async function setSyncTrust(profileId,passcode,days){
-  if(!profileId||!passcode)return;
+  if(MOCK_SYNC||!profileId||!passcode)return;
   try{
     const key=_ensureDevKey();const enc=await _aesGcmEnc(key,passcode);
     const all=_loadAllTrust();all[profileId]={ct:enc.ct,iv:enc.iv,expiresAt:Date.now()+days*86400000};
@@ -4595,6 +4595,7 @@ async function setSyncTrust(profileId,passcode,days){
   }catch(e){console.warn('setSyncTrust failed',e);}
 }
 async function decryptSyncTrust(profileId){
+  if(MOCK_SYNC)return null;
   const rec=_loadAllTrust()[profileId];
   if(!rec||!rec.expiresAt||rec.expiresAt<Date.now())return null;
   try{const key=_ensureDevKey();return await _aesGcmDec(key,rec.ct,rec.iv);}
@@ -4656,12 +4657,15 @@ function syncActive(){const p=currentProfile();return !!(p&&p.binId&&sessionPass
 loadProfiles();
 
 async function deriveKey(passcode,saltB64){
+  if(MOCK_SYNC)return null;
   const salt=Uint8Array.from(atob(saltB64),c=>c.charCodeAt(0));
   const km=await crypto.subtle.importKey('raw',new TextEncoder().encode(passcode),{name:'PBKDF2'},false,['deriveKey']);
   return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:100000,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
 }
 
 async function encryptState(state,saltB64,passcode){
+  /* Mock 验收只在本地服务内传输，使用 Base64 占位以兼容手机 HTTP 非安全上下文；正式同步仍使用 AES-GCM。 */
+  if(MOCK_SYNC)return {salt:saltB64,iv:'',ct:_b64en(new TextEncoder().encode(JSON.stringify(state))),ts:Date.now()};
   const key=await deriveKey(passcode,saltB64);
   const iv=crypto.getRandomValues(new Uint8Array(12));
   const pt=new TextEncoder().encode(JSON.stringify(state));
@@ -4670,6 +4674,10 @@ async function encryptState(state,saltB64,passcode){
 }
 
 async function decryptState(blob,passcode){
+  if(MOCK_SYNC){
+    const bytes=_b64de(blob.ct);
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
   const key=await deriveKey(passcode,blob.salt);
   const iv=Uint8Array.from(atob(blob.iv),c=>c.charCodeAt(0));
   const ct=Uint8Array.from(atob(blob.ct),c=>c.charCodeAt(0));
