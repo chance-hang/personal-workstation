@@ -4788,9 +4788,12 @@ function noteUpdatedAt(value){
   const match=value.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?$/);
   if(!match)return null;
   const [,year,month,day,hour='0',minute='0',second='0',millisecond='0']=match;
-  const stamp=Date.UTC(+year,+month-1,+day,+hour,+minute,+second,millisecond.padEnd(3,'0'));
-  const date=new Date(stamp);
-  return date.getUTCFullYear()===+year&&date.getUTCMonth()===+month-1&&date.getUTCDate()===+day&&date.getUTCHours()===+hour&&date.getUTCMinutes()===+minute&&date.getUTCSeconds()===+second?stamp:null;
+  /* 无时区标记的时间串是旧版本按「本地时间」写入的（noteTime 曾用 todayStr()+' '+HH:MM）。
+     必须按本地语义解析：若按 UTC 解析，UTC+8 下每条旧记录会被虚增 8 小时，
+     使得刚勾选完成时写入的 ISO 时间在比较中被判为「更旧」而丢失；
+     且 cloudPush 推送前会先合并云端，会把本机刚勾选的状态直接回滚。 */
+  const date=new Date(+year,+month-1,+day,+hour,+minute,+second,+millisecond.padEnd(3,'0'));
+  return date.getFullYear()===+year&&date.getMonth()===+month-1&&date.getDate()===+day&&date.getHours()===+hour&&date.getMinutes()===+minute&&date.getSeconds()===+second?date.getTime():null;
 }
 function normalizeNoteRecord(note){
   const result=Object.assign({},note);
