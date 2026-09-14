@@ -4709,8 +4709,30 @@ async function cloudPush(){
   if(!p||!p.binId||!sessionPasscode||syncBusy)return;
   syncBusy=true;setSyncStatus('sync');
   try{
+    /*
+       推送前必须先读取并合并云端最新状态。
+       仅在拉取时合并是不够的：另一台设备可能还保留旧状态，
+       其延迟推送/失败重试会把刚完成的备忘重新覆盖成未完成。
+       同时用 ETag 做乐观并发保护；若 GET 与 PATCH 之间云端已变化，
+       GitHub 返回 412，下面的重试会重新拉取、合并后再写入。
+    */
+    const latest=await fetch(GITHUB_API+'/'+p.binId,{headers:GH_HEADERS(p.masterKey)});
+    if(!latest.ok)throw new Error('HTTP '+latest.status);
+    const latestEtag=latest.headers.get('ETag');
+    const latestData=await latest.json();
+    const latestContent=latestData.files&&latestData.files['data.json']&&latestData.files['data.json'].content;
+    if(latestContent){
+      const latestBlob=JSON.parse(latestContent);
+      if(latestBlob&&latestBlob.ct){
+        const remote=await decryptState(latestBlob,sessionPasscode);
+        if(latestBlob.salt&&latestBlob.salt!==p.salt){p.salt=latestBlob.salt;saveProfiles();}
+        const applied=applyPulledState(remote,false);
+        if(applied.changed){S.updatedAt=Date.now();save();renderAll();}
+      }
+    }
     const blob=await encryptState(S,p.salt,sessionPasscode);
-    const r=await fetch(GITHUB_API+'/'+p.binId,{method:'PATCH',headers:GH_HEADERS(p.masterKey),body:JSON.stringify({files:{'data.json':{content:JSON.stringify(blob)}}})});
+    const pushHeaders=Object.assign({},GH_HEADERS(p.masterKey),latestEtag?{'If-Match':latestEtag}:{});
+    const r=await fetch(GITHUB_API+'/'+p.binId,{method:'PATCH',headers:pushHeaders,body:JSON.stringify({files:{'data.json':{content:JSON.stringify(blob)}}})});
     if(!r.ok)throw new Error('HTTP '+r.status);
     syncRetryCount=0;clearTimeout(syncRetryTimer);
     setSyncStatus('ok');
