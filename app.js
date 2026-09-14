@@ -4618,10 +4618,18 @@ function clearSyncTrust(profileId){
 /* 内置默认账户 Token：故意拆分为两段拼接，仅为规避 GitHub 推送保护对明文 ghp_ 密钥的误报；运行时拼接值与原 Token 完全一致 */
 const GH_DEFAULT_TOKEN=('ghp_'+'RoT8EWFUMqMHFuOhP30NYVAZgbND2W0TA8hJ');
 const DEFAULT_PROFILE={id:'default',name:'默认云库',binId:'0d43906075e8377ee1cdf2d0e0537052',masterKey:GH_DEFAULT_TOKEN,salt:'JIG6ZqdyyXsGLVnD9ME12g=='};
+const MOCK_PROFILE={id:'local-mock',name:'本地 Mock 验收库',binId:'local-mock',masterKey:'local-mock-token',salt:'bG9jYWwtbW9jay1zYWx0'};
 
 /* 读取账户列表：优先本地 PROFILES_KEY；首次运行迁移旧配置或落地内置默认账户 */
 function loadProfiles(){
   try{
+    /* Mock 验收永远不读取本机正式账户配置，避免界面误导或误触正式 Gist。 */
+    if(MOCK_SYNC){
+      syncProfiles=[JSON.parse(JSON.stringify(MOCK_PROFILE))];
+      currentProfileId=MOCK_PROFILE.id;
+      sessionPasscode=null;
+      return;
+    }
     const off=localStorage.getItem('wb_sync_off');
     const raw=localStorage.getItem(PROFILES_KEY);
     if(raw){
@@ -5200,13 +5208,13 @@ function promptLogin(profile){
   if(!profile||!profile.binId){toast('该账户尚未配置 Gist ID');return;}
   const defaultDays=7;
   modal(`<h4>登录云同步账户<span class="modal-close" onclick="closeModal()">×</span></h4>
-    <p class="muted" style="margin:0 0 8px">正在登录：<b>${esc(profile.name)}</b></p>
+    <p class="muted" style="margin:0 0 8px">正在登录：<b>${esc(profile.name)}</b>${MOCK_SYNC?' <span style="color:var(--ok)">（仅本地，不连接正式 Gist）</span>':''}</p>
     <div style="margin:0 0 12px">
       <label style="display:block;font-size:13px;color:var(--sub);margin-bottom:4px">登录账号</label>
-      <input id="loginAccount" class="sync-input" value="${esc(profile.login||'')}" placeholder="${profile.login?'':'可输入登录账号或 Gist ID'}" autocomplete="off" style="font-family:monospace;letter-spacing:0.5px">
-      ${(!profile.login)?`<p class="muted" style="font-size:11px;margin:3px 0 0">未设置登录账号时，也可直接粘贴 Gist ID 登录</p>`:''}
+      <input id="loginAccount" class="sync-input" value="${esc(profile.login|| (MOCK_SYNC?'local-mock':''))}" placeholder="${profile.login?'':'可输入登录账号或 Gist ID'}" autocomplete="off" style="font-family:monospace;letter-spacing:0.5px" ${MOCK_SYNC?'readonly':''}>
+      ${MOCK_SYNC?'<p class="muted" style="font-size:11px;margin:3px 0 0">此为本地模拟账户，数据只保存在当前本地 Mock 服务内</p>':(!profile.login?`<p class="muted" style="font-size:11px;margin:3px 0 0">未设置登录账号时，也可直接粘贴 Gist ID 登录</p>`:'')}
     </div>
-    <div class="privacy-box" style="margin:0 0 12px">数据经 <b>AES-GCM 端到端加密</b>后存于 GitHub Gist。请输入该账户的加密 Passcode 以解密同步数据。</div>
+    <div class="privacy-box" style="margin:0 0 12px">${MOCK_SYNC?'此处使用本地 Mock 云端，不会访问正式 GitHub Gist。':'数据经 <b>AES-GCM 端到端加密</b>后存于 GitHub Gist。'}请输入该账户的加密 Passcode 以解密同步数据。</div>
     <input id="loginPass" type="password" class="sync-input" placeholder="加密 Passcode" autocomplete="off">
     <div id="loginErr" style="color:var(--bad);font-size:12px;min-height:16px;margin:4px 0 8px"></div>
     <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:10px 0 6px;cursor:pointer">
@@ -7477,7 +7485,7 @@ renderAll();
 renderSyncBtn();
 (function initSync(){
   let p=currentProfile();
-  if(!p||!p.binId){p=DEFAULT_PROFILE;syncProfiles=[p];currentProfileId=p.id;saveProfiles();}
+  if(!p||!p.binId){p=MOCK_SYNC?MOCK_PROFILE:DEFAULT_PROFILE;syncProfiles=[p];currentProfileId=p.id;if(!MOCK_SYNC)saveProfiles();}
   if(TEST_BUILD){setSyncStatus('off');return;}
   /* 监听一次：仅在已登录（含 passcode）时实际同步，未登录自动 no-op */
   setInterval(()=>{if(navigator.onLine&&syncActive())cloudPull()},60000);
