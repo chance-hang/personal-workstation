@@ -4665,7 +4665,7 @@ async function deriveKey(passcode,saltB64){
 
 async function encryptState(state,saltB64,passcode){
   /* Mock 验收只在本地服务内传输，使用 Base64 占位以兼容手机 HTTP 非安全上下文；正式同步仍使用 AES-GCM。 */
-  if(MOCK_SYNC)return {salt:saltB64,iv:'',ct:_b64en(new TextEncoder().encode(JSON.stringify(state))),ts:Date.now()};
+  if(MOCK_SYNC)return {salt:saltB64,iv:'',ct:encodeURIComponent(JSON.stringify(state)),ts:Date.now()};
   const key=await deriveKey(passcode,saltB64);
   const iv=crypto.getRandomValues(new Uint8Array(12));
   const pt=new TextEncoder().encode(JSON.stringify(state));
@@ -4674,10 +4674,7 @@ async function encryptState(state,saltB64,passcode){
 }
 
 async function decryptState(blob,passcode){
-  if(MOCK_SYNC){
-    const bytes=_b64de(blob.ct);
-    return JSON.parse(new TextDecoder().decode(bytes));
-  }
+  if(MOCK_SYNC)return JSON.parse(decodeURIComponent(blob.ct));
   const key=await deriveKey(passcode,blob.salt);
   const iv=Uint8Array.from(atob(blob.iv),c=>c.charCodeAt(0));
   const ct=Uint8Array.from(atob(blob.ct),c=>c.charCodeAt(0));
