@@ -4776,6 +4776,14 @@ function mergeNotesByUpdatedAt(local,remote){
   (remote||[]).forEach(note=>{if(!note||!note.id)return;const normalized=normalizeNoteRecord(note);map.set(note.id,map.has(note.id)?choose(map.get(note.id),normalized):normalized);});
   return [...map.values()];
 }
+/* 拉取后的状态决策：常规/自动拉取只合并；仅用户明确恢复时才替换整库。 */
+function applyPulledState(remote,replaceLocal=false){
+  if(replaceLocal){
+    S=normalizeState(remote);
+    return {changed:true,replaced:true};
+  }
+  return {changed:mergeState(remote),replaced:false};
+}
 function runProdNoteMergeChecks(){
   const results=[],test=(name,fn)=>{try{if(!fn())throw Error('结果不符');results.push({name,ok:true});}catch(e){results.push({name,ok:false,error:e.message});}};
   const note=(id,done,updatedAt,extra={})=>Object.assign({id,title:'备忘',content:'正文',done,updatedAt},extra);
@@ -4788,7 +4796,13 @@ function runProdNoteMergeChecks(){
   test('legacy 时间可解析',()=>noteUpdatedAt('2026-09-14 10:00:00.123')!==null);
   test('completed 迁移为 done',()=>mergeNotesByUpdatedAt([],[{id:'legacy',content:'旧备忘',completed:true}])[0].done===true);
   test('不同 ID 保持并集',()=>mergeNotesByUpdatedAt([note('a',false,'2026-09-14T02:00:00Z')],[note('b',true,'2026-09-14T03:00:00Z')]).length===2);
-  const before=S;try{S={todos:[{id:'local',text:'本地'}],notes:[],habits:[],ledger:[],quickNotes:[],countdowns:[],worklog:[],learning:{directions:[],contents:[],plans:[],questions:[],reviews:[],mistakes:[],selftests:[]}};mergeState({todos:[{id:'remote',text:'远端'}]});test('非 notes 维持原 ID 并集',()=>S.todos.length===2&&S.todos.some(x=>x.id==='local')&&S.todos.some(x=>x.id==='remote'));}finally{S=before;}
+  const emptyState=()=>({todos:[],notes:[],habits:[],ledger:[],quickNotes:[],countdowns:[],worklog:[],learning:{directions:[],contents:[],plans:[],questions:[],reviews:[],mistakes:[],selftests:[]}});
+  const before=S;try{
+    S={...emptyState(),todos:[{id:'local',text:'本地'}]};mergeState({todos:[{id:'remote',text:'远端'}]});test('非 notes 维持原 ID 并集',()=>S.todos.length===2&&S.todos.some(x=>x.id==='local')&&S.todos.some(x=>x.id==='remote'));
+    S={...emptyState(),notes:[note('n',true,'2026-09-14T03:00:00.000Z')]};const autoOld=applyPulledState({...emptyState(),notes:[note('n',false,'2026-09-14T02:00:00.000Z')]});test('自动启动 pull 合并并保留本地较新完成状态',()=>!autoOld.replaced&&S.notes[0].done===true);
+    S={...emptyState(),notes:[note('n',true,'2026-09-14T02:00:00.000Z')]};const autoNew=applyPulledState({...emptyState(),notes:[note('n',false,'2026-09-14T03:00:00.000Z')]});test('自动启动 pull 采用云端较新状态',()=>!autoNew.replaced&&S.notes[0].done===false);
+    S={...emptyState(),notes:[note('n',true,'2026-09-14T03:00:00.000Z')]};const restored=applyPulledState({...emptyState(),notes:[note('n',false,'2026-09-14T02:00:00.000Z')]},true);test('手动恢复仍可整库覆盖',()=>restored.replaced&&S.notes[0].done===false);
+  }finally{S=before;}
   return results;
 }
 
@@ -4901,6 +4915,7 @@ function mergeState(remote){
 async function cloudPull(opts={}){
   if(TEST_BUILD)return false;
   const force=!!opts.force;
+  const replaceLocal=!!opts.replaceLocal;
   const throwOnError=!!opts.throwOnError;
   const p=currentProfile();
   if(!p||!p.binId||!sessionPasscode||syncBusy)return false;
@@ -4916,17 +4931,16 @@ async function cloudPull(opts={}){
     const remote=await decryptState(blob,sessionPasscode);
     /* 同步成功后把 profile 的 salt 对齐到云端 blob 的 salt，保证后续推送往返一致 */
     if(blob.salt&&blob.salt!==p.salt){p.salt=blob.salt;saveProfiles();}
-    if(force){
-      /* 历史版本恢复：用户主动操作的整覆盖，保留 force 语义 */
-      S=remote;if(!S.worklog)S.worklog=[];if(!S.notes)S.notes=[];if(!S.countdowns)S.countdowns=[];if(!S.moods)S.moods={};if(!S.habits)S.habits=[];if(!S.todos)S.todos=[];if(!S.ledger)S.ledger=[];if(!S.habitArchive||typeof S.habitArchive!=='object')S.habitArchive={};if(!S.learning||typeof S.learning!=='object')S.learning={directions:[],contents:[],plans:[],questions:[],reviews:[],mistakes:[],selftests:[]};['directions','contents','plans','questions','reviews','mistakes','selftests'].forEach(k=>{if(!Array.isArray(S.learning[k]))S.learning[k]=[]});
+    const applied=applyPulledState(remote,replaceLocal);
+    if(applied.replaced){
+      /* 仅用户明确恢复操作可请求整库替换。 */
       if(Array.isArray(remote.modules))restoreModules(remote.modules);
       save();renderAll();
       setSyncStatus('ok');toast('已从云端恢复');
       return true;
     }
     /* 常规同步：合并而非覆盖，本地记录永不丢失 */
-    const changed=mergeState(remote);
-    if(changed){ S.updatedAt=Date.now(); save(); renderAll(); }
+    if(applied.changed){ S.updatedAt=Date.now(); save(); renderAll(); }
     setSyncStatus('ok'); schedulePush(); /* 合并后把并集推回云端，保证两端一致 */
     return true;
   }catch(e){
