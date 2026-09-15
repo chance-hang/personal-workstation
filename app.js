@@ -2328,6 +2328,10 @@ const dateAdd=(ds,n)=>{const d=new Date(ds+'T00:00:00');d.setDate(d.getDate()+n)
 
 /* ============ 升级功能清单 ============ */
 const CHANGELOG=[
+  {version:'v3.21.5',date:'2026-09-15',modules:['云同步'],status:'已上线',items:[
+    '账户名称支持跨设备同步：改名后随云同步自动同步到手机/其他设备，按最后修改时间裁决冲突',
+    '登录账号与 Token 仍只保存在本机，不参与任何同步，避免凭据外泄'
+  ]},
   {version:'v3.21.4',date:'2026-09-15',modules:['数据安全','云同步'],status:'已上线',items:[
     '正式库不再自动生成任何演示/测试数据：新设备（含手机端）打开后是空白数据，登录云端后直接以云端为准',
     '新增推送红线：本机数据带演示标记（_demoSeeded）时拒绝上传云端并提示先清空，杜绝测试数据污染正式云库',
@@ -4657,6 +4661,43 @@ function loadProfiles(){
 }
 function saveProfiles(){try{localStorage.setItem(PROFILES_KEY,JSON.stringify(syncProfiles))}catch(e){}}
 function currentProfile(){return syncProfiles.find(p=>p.id===currentProfileId)||null}
+
+/* ============ 账户名称跨设备同步（v3.21.5） ============
+   账户配置（名称/登录账号/Token）本只存本机，改名不会跨设备。这里把「账户名称」作为
+   元信息 __acct 随加密业务数据一起往返云端：推送时附加、拉取后立即剥离并写回本机配置。
+   设计要点：
+   1. __acct 只在加密通道中存在，解密后立刻删除，绝不落进 S（业务状态）/本地 data/导出文件；
+   2. 按时间戳裁决：本机改名更晚则保留本机，等下次推送覆盖云端（last-write-wins）；
+   3. Token / Passcode 属敏感配置，仍然只存本机，不参与任何同步。 */
+const ACCT_META_KEY='__acct';
+function acctMeta(){
+  const p=currentProfile();
+  if(!p||!p.name)return null;
+  return {name:String(p.name),ts:Number(p._acctNameTs)||Date.now()};
+}
+function stripAcctMeta(remote){
+  if(remote&&typeof remote==='object'&&ACCT_META_KEY in remote)delete remote[ACCT_META_KEY];
+  return remote;
+}
+function withAcctMeta(state){
+  const meta=acctMeta();
+  return meta?Object.assign({},state,{[ACCT_META_KEY]:meta}):state;
+}
+/* 拉取/合并前调用：把云端账户名写回本机配置，返回是否发生了改名 */
+function applyCloudAcctMeta(remote){
+  const meta=remote&&typeof remote==='object'?remote[ACCT_META_KEY]:null;
+  stripAcctMeta(remote);
+  const p=currentProfile();
+  if(!meta||typeof meta.name!=='string'||!p)return false;
+  const name=meta.name.trim();
+  if(!name||p.name===name)return false;
+  const localTs=Number(p._acctNameTs)||0,remoteTs=Number(meta.ts)||0;
+  if(localTs&&remoteTs&&remoteTs<localTs)return false;
+  p.name=name;p._acctNameTs=remoteTs||Date.now();
+  saveProfiles();
+  try{renderAccountManager();renderSyncBtn();}catch(e){}
+  return true;
+}
 /* 已登录且账户已配置 = 真正可同步状态（passcode 在会话内、binId 已就绪） */
 function syncActive(){const p=currentProfile();return !!(p&&p.binId&&sessionPasscode)}
 loadProfiles();
@@ -4788,12 +4829,14 @@ async function cloudPush(){
       const latestBlob=JSON.parse(latestContent);
       if(latestBlob&&latestBlob.ct){
         const remote=await decryptState(latestBlob,sessionPasscode);
+        if(applyCloudAcctMeta(remote))toast('已同步云端账户名称：'+currentProfile().name);
         if(latestBlob.salt&&latestBlob.salt!==p.salt){p.salt=latestBlob.salt;saveProfiles();}
         const applied=applyPulledState(remote,false);
         if(applied.changed){S.updatedAt=Date.now();save();renderAll();}
       }
     }
-    const blob=await encryptState(S,p.salt,sessionPasscode);
+    /* 附上账户名称元信息随加密数据上云，实现改名跨设备同步（解密端会立即剥离） */
+    const blob=await encryptState(withAcctMeta(S),p.salt,sessionPasscode);
     const pushHeaders=GH_HEADERS(p.masterKey);
     const r=await fetch(GITHUB_API+'/'+p.binId,{method:'PATCH',headers:pushHeaders,body:JSON.stringify({files:{'data.json':{content:JSON.stringify(blob)}}})});
     if(!r.ok)throw new Error('HTTP '+r.status);
@@ -5020,6 +5063,7 @@ async function cloudPull(opts={}){
     const blob=JSON.parse(content);
     if(!blob||!blob.ct){setSyncStatus('ok');if(!force)schedulePush();return true}
     const remote=await decryptState(blob,sessionPasscode);
+    if(applyCloudAcctMeta(remote))toast('已同步云端账户名称：'+currentProfile().name);
     /* 同步成功后把 profile 的 salt 对齐到云端 blob 的 salt，保证后续推送往返一致 */
     if(blob.salt&&blob.salt!==p.salt){p.salt=blob.salt;saveProfiles();}
     const applied=applyPulledState(remote,replaceLocal);
@@ -5049,7 +5093,7 @@ async function previewSyncHistory(idx,version){
   $('#modalBox').classList.add('xl');
   try{
     const blob=await readRevisionBlob(version);
-    const st=await decryptState(blob,sessionPasscode);
+    const st=stripAcctMeta(await decryptState(blob,sessionPasscode));
     const size=(JSON.stringify(blob).length/1024).toFixed(1)+' KB';
     const summary=syncStateSummary(st);
     syncHistDecrypted[version]={summary,size,ok:true};
@@ -5215,6 +5259,7 @@ async function restoreGistRevision(version){
   const r=await fetch(GITHUB_API+'/'+p.binId,{method:'PATCH',headers:GH_HEADERS(p.masterKey),body:JSON.stringify({files:{'data.json':{content:JSON.stringify(blob)}}})});
   if(!r.ok)throw new Error('HTTP '+r.status);
   const restored=await decryptState(blob,sessionPasscode);
+  if(applyCloudAcctMeta(restored))toast('已同步云端账户名称：'+currentProfile().name);
   S=normalizeState(restored);
   if(Array.isArray(restored.modules))restoreModules(restored.modules);
   save();renderAll();setSyncStatus('ok');toast('已恢复历史版本');
@@ -5454,7 +5499,7 @@ function addAccount(){
     try{
       if(!profile.binId){
         S.updatedAt=Date.now();
-        const blob=await encryptState(S,profile.salt,sessionPasscode);
+        const blob=await encryptState(withAcctMeta(S),profile.salt,sessionPasscode);
         const r=await fetch(GITHUB_API,{method:'POST',headers:GH_HEADERS(mk),body:JSON.stringify({description:'LifeWorkbench Sync',public:false,files:{'data.json':{content:JSON.stringify(blob)}}})});
         if(!r.ok)throw new Error('HTTP '+r.status);
         const data=await r.json();profile.binId=data.id;saveProfiles();
@@ -5605,6 +5650,7 @@ function editAccount(p){
   modal(`<h4>编辑账户<span class="modal-close" onclick="closeModal()">×</span></h4>
     <input id="edName" class="sync-input" placeholder="账户名称" value="${esc(p.name||'')}">
     <input id="edLogin" class="sync-input" placeholder="登录账号（字母/数字）" value="${esc(p.login||'')}">
+    <p class="muted" style="margin:8px 0 0;font-size:12px">账户名称会随云同步自动同步到其他设备；登录账号与 Token 仅保存在本机，不上传。</p>
     <div class="btn-pair" style="margin-top:12px">
       <button id="edCancel" style="flex:1;border:1px solid var(--line);border-radius:var(--r-sm);padding:10px">取消</button>
       <button id="edSave" style="flex:1;background:var(--text);color:#fff;border-radius:var(--r-sm);padding:10px;font-weight:600">保存</button>
@@ -5613,7 +5659,9 @@ function editAccount(p){
   $('#edSave').onclick=()=>{
     p.name=($('#edName').value.trim()||'未命名账户');
     p.login=($('#edLogin').value.trim()||null);
-    saveProfiles();closeModal();toast('账户已更新');renderAccountManager();
+    p._acctNameTs=Date.now();   /* 改名时间戳：用于跨设备冲突裁决，并随下次同步上云 */
+    saveProfiles();closeModal();toast('账户已更新，名称将同步到其他设备');renderAccountManager();
+    if(syncActive())schedulePush();
   };
 }
 
