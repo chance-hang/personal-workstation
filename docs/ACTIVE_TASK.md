@@ -1,23 +1,23 @@
 # ACTIVE TASK
 
-最后更新：2026-09-15（Prod 云同步重新登录入口修复）
+最后更新：2026-09-15（Prod 云同步重新登录入口已发布）
 
 ## 当前状态
 
-`Awaiting User Acceptance`
+`Completed / Accepted`
 
 - 当前 review 分支：`review/cloud-relogin-entry`
-- 当前提交：待提交
+- 当前提交：`4006e0e3b4576801421063763dd8ae009c153fd0`
 - 来源基线：Prod `main` `e7478eac97499b5399d9392929009e166c4fd0f5`
 - 已完成 Prod 原生同步模型迁移验证，不再依赖 Test source 或 Test remote。
 - 发布范围：仅修复 Prod 云同步认证/解密失败后的会话失效处理、重新登录入口和手动同步登录引导。
 - 必须保留：Prod 登录、无前缀 localStorage、Gist、IndexedDB、导入导出、初始化顺序及其余业务逻辑。
 - 禁止：直接 cherry-pick Test 提交、`_syncV2`、CRDT、字段级版本系统及任何无关业务改动。
-- 目标分支：`main`；本任务完成后不得自动合并，须等待用户人工验收和明确发布授权。
+- 目标分支：`main`；用户已明确授权发布，Prod 已完成快进升级。
 
 ## 当前优先级
 
-- `P0 Active`：Prod 云同步重新登录入口修复；完成 Codex 自检与本地浏览器验收后等待用户人工验收。
+- `P0 Completed / Accepted`：Prod 云同步重新登录入口修复已完成自检并发布到 `main`；用户已明确授权升级。
 - 没有 P1 Queued。
 - `P2 Backlog`：等待用户或项目负责人派发新发布任务；新发布到达前 Executor 不主动实施任何变更。
 
