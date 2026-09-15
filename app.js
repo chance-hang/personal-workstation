@@ -4670,14 +4670,16 @@ async function encryptState(state,saltB64,passcode){
   const iv=crypto.getRandomValues(new Uint8Array(12));
   const pt=new TextEncoder().encode(JSON.stringify(state));
   const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,pt);
-  return {salt:saltB64,iv:btoa(String.fromCharCode(...iv)),ct:btoa(String.fromCharCode(...new Uint8Array(ct))),ts:Date.now()};
+  /* 必须用分块 helper：String.fromCharCode(...大数组) 会栈溢出（实测 >12 万字节即 RangeError，
+     本地数据涨大后 push 每次静默失败，正是「同步失败」无提示的根因）。 */
+  return {salt:saltB64,iv:_b64en(iv),ct:_b64en(new Uint8Array(ct)),ts:Date.now()};
 }
 
 async function decryptState(blob,passcode){
   if(MOCK_SYNC)return JSON.parse(decodeURIComponent(blob.ct));
   const key=await deriveKey(passcode,blob.salt);
-  const iv=Uint8Array.from(atob(blob.iv),c=>c.charCodeAt(0));
-  const ct=Uint8Array.from(atob(blob.ct),c=>c.charCodeAt(0));
+  const iv=_b64de(blob.iv);
+  const ct=_b64de(blob.ct);
   const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,ct);
   return JSON.parse(new TextDecoder().decode(pt));
 }
