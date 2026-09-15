@@ -1,13 +1,13 @@
 # ACTIVE TASK
 
-最后更新：2026-09-15（Prod 云同步缓存版本阻断修复）
+最后更新：2026-09-15（Prod 云同步缓存版本阻断修复已发布）
 
 ## 当前状态
 
-`Awaiting User Acceptance`
+`Completed / Accepted`
 
 - 当前 review 分支：`review/cloud-cache-bust-fix`
-- 当前提交：待提交
+- 当前提交：`b79484c24fe4a333aa09abc450214e3a8ce77dfb`
 - 来源基线：Prod `main` `db584f6a87020de25c40670fd5d576ffc0f3bb63`
 - 来源基线：Prod `main` `8b8b87d0a87f9cf43ad1d03cad04ba43e290c4b5`
 - 来源基线：Prod `main` `e7478eac97499b5399d9392929009e166c4fd0f5`
@@ -15,11 +15,11 @@
 - 发布范围：仅更新 Prod 首页脚本版本参数，确保客户端加载已发布的 Token 写入权限修复。
 - 必须保留：Prod 登录、无前缀 localStorage、Gist、IndexedDB、导入导出、初始化顺序及其余业务逻辑。
 - 禁止：直接 cherry-pick Test 提交、`_syncV2`、CRDT、字段级版本系统及任何无关业务改动。
-- 目标分支：`main`；完成自检和用户人工验收后再发布。
+- 目标分支：`main`；用户已明确授权，Prod 已完成快进升级。
 
 ## 当前优先级
 
-- `P0 Active`：Prod 云同步缓存版本阻断修复；完成自检后等待用户人工验收。
+- `P0 Completed / Accepted`：Prod 云同步缓存版本阻断修复已完成自检并发布到 `main`。
 - 没有 P1 Queued。
 - `P2 Backlog`：等待用户或项目负责人派发新发布任务；新发布到达前 Executor 不主动实施任何变更。
 
