@@ -13,7 +13,7 @@ GitHub：`chance-hang/personal-workstation`
 
 1. 日常变更从 Prod `main` 创建临时 `review/*` 分支。
 2. Review 分支只能使用本地 Mock 云同步验收，不连接正式 Gist。
-3. 只有经过 ChatGPT Review 和人工验收的 review 版本，才允许发布到 Prod `main`。
+3. ChatGPT Review 不是发布门禁；由 Codex 完成必要的自检和自动验证，用户人工验收并明确同意发布后，review 版本才允许发布到 Prod `main`。
 4. 发布时必须明确 review commit / 分支与允许同步范围。
 5. 环境专属行为必须保留，禁止无脑覆盖。
 6. 除非 `docs/ACTIVE_TASK.md` 明确授权，不要修改正式业务代码。
@@ -121,12 +121,11 @@ Executor 到达以下门槛必须立即 STOP：
 
 | 状态 | 后续推进必须由谁激活 |
 | --- | --- |
-| `Awaiting ChatGPT Review` | ChatGPT |
 | `Awaiting User Acceptance` | 用户 |
 | `Blocked` | ChatGPT + 用户 |
-| `Completed / Accepted` | ChatGPT 派发下一 Task 或执行发布 |
+| `Completed / Accepted` | 用户确认后进入下一 Task 或执行发布 |
 
-Prod 发布期间 Executor 完成 commit / push 后必须停在 `Awaiting ChatGPT Review`，不得自行推进到 Prod `main` 合并。
+Prod 发布期间 Executor 完成 commit / push 和必要自检后，进入 `Awaiting User Acceptance`；用户明确同意发布后才可推进到 Prod `main` 合并。
 
 ### 上下文高效指令与汇报
 

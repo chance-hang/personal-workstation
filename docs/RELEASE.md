@@ -20,10 +20,9 @@ Idle
 
 只有当 review 分支已经过：
 
-1. Codex 完成开发并 push；
-2. ChatGPT Review 通过；
-3. 用户人工验收通过；
-4. review 验收证据明确标记 `Release Ready`；
+1. Codex 完成开发、必要自检并 push；
+2. 用户人工验收通过；
+3. review 验收证据明确标记 `Release Ready`；
 
 才允许在 Prod 开始发布。
 
@@ -46,7 +45,7 @@ Prod 发布前必须：
 - 不覆盖 Prod 环境专属配置或正式行为。
 - 不在 Prod 重新设计或重新实现 Test 已完成的产品需求。
 
-如果 Test 与 Prod 在同一业务文件中存在环境差异，应以“保留 Prod 环境行为 + 引入已验收 Test 功能”为目标完成最小受控同步，并等待 ChatGPT Review。
+如果 Test 与 Prod 在同一业务文件中存在环境差异，应以“保留 Prod 环境行为 + 引入已验收 Test 功能”为目标完成最小受控同步，并由 Codex 完成自检后交用户人工验收。ChatGPT Review 可选，不构成发布门禁。
 
 ## 每次发布任务必须明确
 
@@ -76,8 +75,7 @@ Prod 发布前必须：
 ## 发布完成后
 
 1. push 发布分支；
-2. 停止等待 ChatGPT Review；
-3. Review 通过后再合并 `main`；
-4. 用户进行 Prod 人工验收；
-5. 验收通过后，由 ChatGPT 更新 `docs/RELEASE_HISTORY.md`；
-6. Prod `docs/ACTIVE_TASK.md` 回到无任务状态。
+2. 等待用户明确同意发布后再合并 `main`；
+3. 用户进行 Prod 人工验收；
+4. 验收通过后记录 `docs/RELEASE_HISTORY.md`；
+5. Prod `docs/ACTIVE_TASK.md` 回到无任务状态。
