@@ -2328,6 +2328,11 @@ const dateAdd=(ds,n)=>{const d=new Date(ds+'T00:00:00');d.setDate(d.getDate()+n)
 
 /* ============ 升级功能清单 ============ */
 const CHANGELOG=[
+  {version:'v3.21.4',date:'2026-09-15',modules:['数据安全','云同步'],status:'已上线',items:[
+    '正式库不再自动生成任何演示/测试数据：新设备（含手机端）打开后是空白数据，登录云端后直接以云端为准',
+    '新增推送红线：本机数据带演示标记（_demoSeeded）时拒绝上传云端并提示先清空，杜绝测试数据污染正式云库',
+    '云同步推送修复：移除 Gist PATCH 的 If-Match 请求头（现在一律返回 400），密文转 base64 改分块处理，修复数据量大时推送崩溃'
+  ]},
   {version:'v3.21.3',date:'2026-08-31',modules:['账本'],status:'已上线',items:[
     '账本三视图切换栏恢复吸顶，并动态跟随实际页头高度，避免与页头重叠',
     '账本模块定位自动预留页头和切换栏高度，侧栏跳转与快捷记账不会遮住模块标题和内容'
@@ -4759,6 +4764,9 @@ function renderSyncHistoryPreview(st){
 
 async function cloudPush(){
   if(TEST_BUILD)return;
+  /* 数据安全红线：带演示/测试数据标记（_demoSeeded）的本机状态一律禁止上传云端。
+     自动预置的示例数据会打上该标记，正式库永不预置；历史残留设备需先清空本机数据再登录。 */
+  if(S&&S._demoSeeded){setSyncStatus('err');toast('本机含演示数据，已阻止上传云端；请先「我的 → 数据管理 → 清空全部数据」');return;}
   const p=currentProfile();
   if(!p||!p.binId||!sessionPasscode||syncBusy)return;
   syncBusy=true;setSyncStatus('sync');
@@ -6045,8 +6053,10 @@ function initFilters(){
 function renderAll(){renderHeader();renderTodos();renderHabits();renderMoney();renderHeat();renderHistory();renderNotes();renderWorklog();renderTodayStat();renderFocusCard();renderChangelog();renderAbout();renderLearning();applyModuleLayout();renderStorageHealth()}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
-/* 首次使用预置示例 */
-if((!currentProfile()||!sessionPasscode)&&S.todos.length===0&&S.habits.length===0&&S.ledger.length===0&&S.notes.length===0&&S.countdowns.length===0&&S.worklog.length===0){
+/* 首次使用预置示例：仅限测试版（TEST_BUILD）。
+   正式库严禁自动生成任何演示/测试数据：新设备（含手机端）登录前被预置的示例数据，
+   会在登录后随「拉取-合并-推送」一起上传云端，直接污染正式数据（2026-09-15 手机端事故）。 */
+if(TEST_BUILD&&(!currentProfile()||!sessionPasscode)&&S.todos.length===0&&S.habits.length===0&&S.ledger.length===0&&S.notes.length===0&&S.countdowns.length===0&&S.worklog.length===0){
   const t=todayStr();
   const now=new Date();
   S.todos=[
@@ -6076,8 +6086,23 @@ if((!currentProfile()||!sessionPasscode)&&S.todos.length===0&&S.habits.length===
   S.learning={directions:[dDir],contents:[],plans:[],questions:[{id:uid(),directionId:dDir.id,contentId:null,title:'示例问题：如何高效记忆学过的知识？',detail:'比如看完书后过几天就忘，有没有好的方法？',status:'open',tags:['方法'],answer:'',createdAt:t}],reviews:[],mistakes:[],selftests:[]};
   const ny=new Date();ny.setMonth(11);ny.setDate(31);
   S.countdowns=[{id:uid(),name:'今年还剩',date:fmtDate(ny),color:'#5a5a5a'}];
+  S._demoSeeded=true; /* 演示数据标记：cloudPush 会据此拒绝上传，防止测试数据进入正式云库 */
   persist();
 }
+/* 历史残留演示数据自愈：早期版本会在新设备登录前预置示例数据，升级后这些脏数据仍留在本机。
+   检测到即打上演示标记（阻止上传），并提示用户清空后重新拉取云端。 */
+try{
+  if(!TEST_BUILD&&!S._demoSeeded&&(S.notes||[]).some(n=>n&&/已预置示例数据/.test(String(n.content||'')))){
+    S._demoSeeded=true;persist();
+    setTimeout(()=>{try{
+      modal('<h4>检测到本机演示数据<span class="modal-close" onclick="closeModal()">×</span></h4>'
+        +'<p style="margin:0 0 12px">这台设备上存有早期版本自动生成的示例数据（示例待办 / 示例账目 / 示例学习方向等）。<br>已<b>阻止本机上传云端</b>，避免污染正式数据。<br>建议清空本机数据后重新登录，即可拉回云端的干净数据。</p>'
+        +'<div class="btns"><button class="cancel" onclick="closeModal()">稍后处理</button><button class="ok" id="demoClearBtn">清空本机数据</button></div>',{noMaskClose:true});
+      const b=$('#demoClearBtn');
+      if(b)b.onclick=()=>{S=structuredClone(DEFAULT);persist();closeModal();renderAll();toast('已清空本机数据，请重新登录以拉取云端')};
+    }catch(e){}},800);
+  }
+}catch(e){}
 
 /* ============ 学习模块 ============ */
 function lnData(){if(!S.learning)S.learning={directions:[],contents:[],plans:[],questions:[],reviews:[],mistakes:[],selftests:[]};['directions','contents','plans','questions','reviews','mistakes','selftests'].forEach(k=>{if(!Array.isArray(S.learning[k]))S.learning[k]=[]});
