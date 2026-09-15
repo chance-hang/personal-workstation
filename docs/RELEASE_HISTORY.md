@@ -1,5 +1,40 @@
 # RELEASE HISTORY
 
+## 2026-09-15 — 云同步推送管道修复（If-Match 400 + 大数组 base64 溢出）
+
+类型：Prod 云同步推送（cloudPush）阻断修复。
+
+背景：
+
+- 用户录屏 + DevTools 截图确认：登录后状态「同步中」→「同步失败」，全程无错误提示，
+  浏览器网络面板显示对 Gist 的 PATCH 连续返回 `400 Bad Request`。
+- 云端 `data.json` 自 2026-09-14 15:53 起未再更新，说明推送管道整体中断。
+
+根因：
+
+1. GitHub Gist API 现在对带 `If-Match` 请求头的 PATCH 一律返回 `400 Bad Request`
+   （实测：ETag 取自身为强格式且值正确也返回 400，不带该头则 200 通过）。
+   工作台 `cloudPush` 每次推送都带 `If-Match` 做乐观锁，因此每次推送必失败。
+   该错误既不是 401/403 也不含 decrypt 关键字，落入静默分支，只重试不提示。
+2. `encryptState` 使用 `btoa(String.fromCharCode(...new Uint8Array(ct)))` 展开整个密文字节数组，
+   线上实测超过约 120KB 即抛 `RangeError: Maximum call stack size exceeded`（150KB 必炸）。
+   数据增长后会以同样方式静默失败，属定时炸弹。
+
+结果：
+
+- 移除 PATCH 的 `If-Match` 头；并发安全改由既有的「推送前先拉取云端并合并」流程承担，
+  并保留注释说明不要再引入该头。
+- 加解密的字节与 base64 互转改用仓库既有的分块 helper `_b64en` / `_b64de`，与 `_aesGcmEnc` 惯例一致。
+- 实测 3MB 数据加密约 364ms；curl 对照实验：不带 `If-Match` 的 160KB PATCH 返回 200。
+- `node --check app.js` 通过；首页脚本版本戳 bump 到 `app.js?v=prod-push-b64-fix-20260915-2`。
+- 用户已明确授权发布到 Prod（跳过 ChatGPT Review 环节，由用户直接线上验收）。
+
+关键提交：
+
+- 验收来源提交：`9e5191ffb976e7d650837e7084b6780d79679301`
+- Prod 发布提交：`9e5191ffb976e7d650837e7084b6780d79679301`
+
+
 ## 2026-09-15 — Prod 脚本缓存版本阻断修复
 
 类型：Prod 发布缓存修复。
