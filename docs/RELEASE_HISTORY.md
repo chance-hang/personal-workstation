@@ -1,5 +1,22 @@
 # RELEASE HISTORY
 
+## 2026-09-15 — Token 写入权限阻断修复
+
+类型：Prod 云同步凭据与登录恢复修复。
+
+结果：
+
+- 移除源码中的硬编码 GitHub Token，默认账户保留 Gist ID，Token 改由账户管理输入。
+- 登录前预检 Gist 访问权限，区分 Token 无效、无 `gist` 权限、Passcode 错误和网络失败。
+- 账户管理增加“更新 Token”，验证成功后才保存，电脑端和手机端均适用。
+- `node --check app.js`、凭据字面量检查和 `git diff --check` 通过。
+- 用户已明确授权发布到 Prod。
+
+关键提交：
+
+- 验收来源提交：`cb389abae7bfdbc9f97cc0cc662cf8fd52fc91f9`
+- Prod 发布提交：`cb389abae7bfdbc9f97cc0cc662cf8fd52fc91f9`
+
 ## 2026-09-15 — Prod 云同步重新登录入口
 
 类型：Prod 云同步登录恢复体验修复。
