@@ -4558,6 +4558,7 @@ const GH_HEADERS=(token)=>({'Authorization':'token '+token,'Accept':'application
 let syncProfiles=[];        /* 账户列表 [{id,name,binId,masterKey,salt}]，不含 passcode */
 let currentProfileId=null;  /* 当前选中账户 id */
 let sessionPasscode=null;   /* 运行时登录态（passcode 不持久化，刷新需重新输入 = 登录效果） */
+let syncAuthRequired=false; /* 认证/解密失败后保留账户配置，但要求用户重新登录 */
 let syncTimer=null;
 let syncBusy=false;
 
@@ -4689,11 +4690,27 @@ function setSyncStatus(state){
   el.textContent=t;el.className='sync-dot '+c;
 }
 
+function isSyncAuthError(error){
+  const message=String(error&&error.message||error||'');
+  return /HTTP\s+(401|403)\b/i.test(message)||message.includes('decrypt');
+}
+function markSyncAuthRequired(){
+  const p=currentProfile();
+  sessionPasscode=null;
+  syncAuthRequired=true;
+  if(p)clearSyncTrust(p.id);
+  clearTimeout(syncRetryTimer);clearTimeout(syncTimer);
+  setSyncStatus('err');renderSyncBtn();
+}
+
 function renderSyncBtn(){
   const btn=$('#syncBtn');
   if(!btn)return;
   const p=currentProfile();
-  btn.textContent=(p&&p.binId)?'管理':'设置';
+  const needsLogin=!!(p&&p.binId&&(syncAuthRequired||!sessionPasscode));
+  btn.textContent=needsLogin?'重新登录':((p&&p.binId)?'管理':'设置');
+  btn.title=needsLogin?'当前账户需要重新输入 Passcode':'';
+  btn.onclick=needsLogin?(()=>promptLogin(p)):openSyncSetup;
 }
 
 let syncHistAll=[],syncHistPage=0,syncHistDecrypted={};
@@ -4751,7 +4768,10 @@ async function cloudPush(){
     if(!r.ok)throw new Error('HTTP '+r.status);
     syncRetryCount=0;clearTimeout(syncRetryTimer);
     setSyncStatus('ok');
-  }catch(e){setSyncStatus('err');console.warn('push fail',e.message);schedulePushRetry();}
+  }catch(e){
+    if(isSyncAuthError(e))markSyncAuthRequired();
+    else{setSyncStatus('err');console.warn('push fail',e.message);schedulePushRetry();}
+  }
   finally{syncBusy=false}
 }
 
@@ -4984,7 +5004,7 @@ async function cloudPull(opts={}){
     setSyncStatus('ok'); schedulePush(); /* 合并后把并集推回云端，保证两端一致 */
     return true;
   }catch(e){
-    if(e.message&&e.message.includes('decrypt')){setSyncStatus('err');toast('Passcode 错误，无法解密')}
+    if(isSyncAuthError(e)){markSyncAuthRequired();toast('云同步登录已失效，请重新登录')}
     else{setSyncStatus('err');console.warn('pull fail',e.message)}
     if(throwOnError)throw e;
     return false;
@@ -5197,6 +5217,7 @@ function maskGist(id){
 /* 登录某账户：写入会话 passcode，并拉取该账户云端数据（强制覆盖本地，首次登录即载入） */
 async function loginToProfile(profile,passcode,opts={}){
   sessionPasscode=passcode;
+  syncAuthRequired=false;
   currentProfileId=profile.id;saveProfiles();
   try{
     await cloudPull({force:true,throwOnError:true});
@@ -5205,6 +5226,7 @@ async function loginToProfile(profile,passcode,opts={}){
     return true;
   }catch(e){
     sessionPasscode=null;
+    syncAuthRequired=isSyncAuthError(e);
     if(opts.silent)throw e;
     toast('登录失败：'+(e.message&&e.message.includes('decrypt')?'Passcode 错误':(e.message||e)));
     return false;
@@ -5292,7 +5314,7 @@ function renderAccountManager(){
   const rows=syncProfiles.map(p=>{
     const isCur=p.id===currentProfileId;
     const acts=isCur
-      ? `<span class="acc-tag">当前</span>`
+      ? (loggedIn?`<span class="acc-tag">当前</span>`:`<button class="acc-btn" data-login="${esc(p.id)}">重新登录</button>`)
       : `<button class="acc-btn" data-switch="${esc(p.id)}">切换</button>`;
     const del=(syncProfiles.length>1)?`<button class="acc-btn danger" data-del="${esc(p.id)}">删除</button>`:'';
     const edit=`<button class="acc-btn" data-edit="${esc(p.id)}">编辑</button>`;
@@ -5306,7 +5328,7 @@ function renderAccountManager(){
       <div class="sync-row"><span>Gist ID</span><code title="${esc(cur.binId)}">${esc(cur.binId)}</code></div>
       ${trustRow}
       <div class="sync-row"><span>加密</span><span style="font-size:12px">AES-GCM 256</span></div>
-    </div>`:`<div class="privacy-box" style="margin-bottom:12px">当前未登录。点击账户「切换」或下方「新增账户」并输入 Passcode 即可登录；账户配置（名称/Gist ID/Token）已保留，无需重复填写。</div>`;
+    </div>`:`<div class="privacy-box" style="margin-bottom:12px">当前未登录。账户配置（名称/Gist ID/Token）已保留，无需重复填写。点击当前账户「重新登录」并输入 Passcode 即可恢复同步。</div>`;
   modal(`<h4>云同步 · 账户管理<span class="modal-close" onclick="closeModal()">×</span></h4>
     ${curCard}
     <div class="acc-list">${rows}</div>
@@ -5327,6 +5349,7 @@ function renderAccountManager(){
     <p class="muted" style="font-size:12px;margin-top:12px;margin-bottom:0">Passcode 不保存于本机，每次打开需重新登录对应账户；账户配置会保留，无需重复填写 Token。新设备用「导入账户配置」+ Passcode 即可恢复同步。</p>`,{noMaskClose:true});
   const s2=$('#syncStatus2'),ss=$('#syncStatus');if(s2&&ss){s2.className=ss.className;s2.textContent=ss.textContent;}
   $('#modalBox').querySelectorAll('[data-switch]').forEach(b=>b.onclick=()=>{const p=syncProfiles.find(x=>x.id===b.getAttribute('data-switch'));if(p)switchProfile(p);});
+  $('#modalBox').querySelectorAll('[data-login]').forEach(b=>b.onclick=()=>{const p=syncProfiles.find(x=>x.id===b.getAttribute('data-login'));if(p){closeModal();promptLogin(p);}});
   $('#modalBox').querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{deleteProfile(b.getAttribute('data-del'));});
   $('#modalBox').querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const p=syncProfiles.find(x=>x.id===b.getAttribute('data-edit'));if(p)editAccount(p);});
   $('#addAccBtn').onclick=addAccount;
@@ -5567,9 +5590,9 @@ function doLogout(){
   toast('已退出登录（账户配置保留，可再次登录）');
 }
 
-const _sb=$('#syncBtn'); if(_sb)_sb.onclick=openSyncSetup;
+const _sb=$('#syncBtn'); if(_sb)renderSyncBtn();
 const _shd=$('#syncHistoryBtnDirect'); if(_shd)_shd.onclick=openSyncHistory;
-const _snd=$('#syncNowBtnDirect'); if(_snd)_snd.onclick=async()=>{ const p=currentProfile(); if(!p||!p.binId||!sessionPasscode){toast('请先登录云同步账户');return} setSyncStatus('sync');toast('正在同步…'); try{ await cloudPull(); schedulePush(); toast('同步完成'); }catch(e){ toast('同步失败：'+(e.message||e)); } };
+const _snd=$('#syncNowBtnDirect'); if(_snd)_snd.onclick=async()=>{ const p=currentProfile(); if(!p||!p.binId){openSyncSetup();return} if(!sessionPasscode){promptLogin(p);return} setSyncStatus('sync');toast('正在同步…'); try{ await cloudPull(); schedulePush(); toast('同步完成'); }catch(e){ toast('同步失败：'+(e.message||e)); } };
 
 
 /* ============ 更新日志 ============ */

@@ -1,22 +1,23 @@
 # ACTIVE TASK
 
-最后更新：2026-09-15（备忘同步时区修复发布）
+最后更新：2026-09-15（Prod 云同步重新登录入口修复）
 
 ## 当前状态
 
-`Completed / Accepted`
+`Awaiting User Acceptance`
 
-- 当前 review 分支：`review/prod-note-tz-fix`
-- 当前提交：`ede3523d67`
+- 当前 review 分支：`review/cloud-relogin-entry`
+- 当前提交：待提交
+- 来源基线：Prod `main` `e7478eac97499b5399d9392929009e166c4fd0f5`
 - 已完成 Prod 原生同步模型迁移验证，不再依赖 Test source 或 Test remote。
-- 发布范围：仅在 Prod 原生 `app.js` 同步模型中等价适配备忘时间戳解析、UTC 写入、legacy `completed` 迁移与同 ID 冲突裁决；更新本任务门禁记录。
+- 发布范围：仅修复 Prod 云同步认证/解密失败后的会话失效处理、重新登录入口和手动同步登录引导。
 - 必须保留：Prod 登录、无前缀 localStorage、Gist、IndexedDB、导入导出、初始化顺序及其余业务逻辑。
 - 禁止：直接 cherry-pick Test 提交、`_syncV2`、CRDT、字段级版本系统及任何无关业务改动。
-- 目标分支：`main`；Prod 原生适配已完成自动验证、本地 Mock 人工验收，用户已确认通过并授权合并升级。
+- 目标分支：`main`；本任务完成后不得自动合并，须等待用户人工验收和明确发布授权。
 
 ## 当前优先级
 
-- `P0 Completed / Accepted`：备忘同步时区修复提交 `ede3523d67` 已推送并完成本地 Mock 验收，用户已确认通过并授权发布；禁止恢复 Test source 或 Test remote。
+- `P0 Active`：Prod 云同步重新登录入口修复；完成 Codex 自检与本地浏览器验收后等待用户人工验收。
 - 没有 P1 Queued。
 - `P2 Backlog`：等待用户或项目负责人派发新发布任务；新发布到达前 Executor 不主动实施任何变更。
 
