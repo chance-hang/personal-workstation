@@ -4767,12 +4767,13 @@ async function cloudPush(){
        推送前必须先读取并合并云端最新状态。
        仅在拉取时合并是不够的：另一台设备可能还保留旧状态，
        其延迟推送/失败重试会把刚完成的备忘重新覆盖成未完成。
-       同时用 ETag 做乐观并发保护；若 GET 与 PATCH 之间云端已变化，
-       GitHub 返回 412，下面的重试会重新拉取、合并后再写入。
+       注意：不要给 PATCH 加 If-Match 乐观锁——GitHub Gist API
+       对带 If-Match 的 PATCH 一律返回 400 Bad Request（实测
+       2026-09-15，etag 正确与否均 400），并发保护由上面的
+       拉取-合并-推送流程承担。
     */
     const latest=await fetch(GITHUB_API+'/'+p.binId,{headers:GH_HEADERS(p.masterKey)});
     if(!latest.ok)throw new Error('HTTP '+latest.status);
-    const latestEtag=latest.headers.get('ETag');
     const latestData=await latest.json();
     const latestContent=latestData.files&&latestData.files['data.json']&&latestData.files['data.json'].content;
     if(latestContent){
@@ -4785,7 +4786,7 @@ async function cloudPush(){
       }
     }
     const blob=await encryptState(S,p.salt,sessionPasscode);
-    const pushHeaders=Object.assign({},GH_HEADERS(p.masterKey),latestEtag?{'If-Match':latestEtag}:{});
+    const pushHeaders=GH_HEADERS(p.masterKey);
     const r=await fetch(GITHUB_API+'/'+p.binId,{method:'PATCH',headers:pushHeaders,body:JSON.stringify({files:{'data.json':{content:JSON.stringify(blob)}}})});
     if(!r.ok)throw new Error('HTTP '+r.status);
     syncRetryCount=0;clearTimeout(syncRetryTimer);
