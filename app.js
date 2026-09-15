@@ -4617,9 +4617,8 @@ function clearSyncTrust(profileId){
 }
 /* 内置默认账户（硬编码）：首次打开/清缓存/新设备连接时自动出现，无需手填 token。
    注意：token 明文硬编码于源码，仅建议用于个人 gist 权限的 token；passcode 不内置，需登录输入。 */
-/* 内置默认账户 Token：故意拆分为两段拼接，仅为规避 GitHub 推送保护对明文 ghp_ 密钥的误报；运行时拼接值与原 Token 完全一致 */
-const GH_DEFAULT_TOKEN=('ghp_'+'RoT8EWFUMqMHFuOhP30NYVAZgbND2W0TA8hJ');
-const DEFAULT_PROFILE={id:'default',name:'默认云库',binId:'0d43906075e8377ee1cdf2d0e0537052',masterKey:GH_DEFAULT_TOKEN,salt:'JIG6ZqdyyXsGLVnD9ME12g=='};
+/* 默认账户只保留 Gist 定位信息；访问 Token 必须由用户在账户管理中输入，不进入源码。 */
+const DEFAULT_PROFILE={id:'default',name:'默认云库',binId:'0d43906075e8377ee1cdf2d0e0537052',masterKey:null,salt:'JIG6ZqdyyXsGLVnD9ME12g=='};
 const MOCK_PROFILE={id:'local-mock',name:'本地 Mock 验收库',binId:'local-mock',masterKey:'local-mock-token',salt:'bG9jYWwtbW9jay1zYWx0'};
 
 /* 读取账户列表：优先本地 PROFILES_KEY；首次运行迁移旧配置或落地内置默认账户 */
@@ -4694,6 +4693,25 @@ function isSyncAuthError(error){
   const message=String(error&&error.message||error||'');
   return /HTTP\s+(401|403)\b/i.test(message)||message.includes('decrypt');
 }
+function syncErrorText(error){
+  const message=String(error&&error.message||error||'');
+  if(/HTTP\s+401\b/i.test(message))return 'GitHub Token 无效或已过期';
+  if(/HTTP\s+403\b/i.test(message))return 'GitHub Token 没有 Gist 写入权限';
+  if(message.includes('decrypt'))return 'Passcode 错误，无法解密云端数据';
+  if(/Failed to fetch|NetworkError|Load failed/i.test(message))return '手机/浏览器无法连接 GitHub API';
+  return message||'未知错误';
+}
+async function validateSyncToken(profile,token){
+  if(MOCK_SYNC)return true;
+  if(!profile||!profile.binId||!token)throw new Error('缺少 GitHub Token 或 Gist ID');
+  const r=await fetch(GITHUB_API+'/'+profile.binId,{headers:GH_HEADERS(token)});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const scopes=r.headers.get('X-OAuth-Scopes');
+  if(scopes&& !scopes.split(',').map(x=>x.trim()).includes('gist'))throw new Error('HTTP 403');
+  const data=await r.json();
+  if(!data||data.id!==profile.binId)throw new Error('Gist ID 不匹配');
+  return true;
+}
 function markSyncAuthRequired(){
   const p=currentProfile();
   sessionPasscode=null;
@@ -4707,10 +4725,12 @@ function renderSyncBtn(){
   const btn=$('#syncBtn');
   if(!btn)return;
   const p=currentProfile();
+  const needsToken=!!(p&&p.binId&&!p.masterKey);
   const needsLogin=!!(p&&p.binId&&(syncAuthRequired||!sessionPasscode));
-  btn.textContent=needsLogin?'重新登录':((p&&p.binId)?'管理':'设置');
-  btn.title=needsLogin?'当前账户需要重新输入 Passcode':'';
-  btn.onclick=needsLogin?(()=>promptLogin(p)):openSyncSetup;
+  btn.textContent=needsToken?'更新 Token':(needsLogin?'重新登录':((p&&p.binId)?'管理':'设置'));
+  btn.title=needsToken?'请先配置 GitHub Token':(needsLogin?'当前账户需要重新输入 Passcode':'');
+  /* 失败态先进入账户管理，用户可在同一入口更新 Token 或重新登录。 */
+  btn.onclick=openSyncSetup;
 }
 
 let syncHistAll=[],syncHistPage=0,syncHistDecrypted={};
@@ -4769,7 +4789,7 @@ async function cloudPush(){
     syncRetryCount=0;clearTimeout(syncRetryTimer);
     setSyncStatus('ok');
   }catch(e){
-    if(isSyncAuthError(e))markSyncAuthRequired();
+    if(isSyncAuthError(e)){markSyncAuthRequired();toast('同步写入失败：'+syncErrorText(e));}
     else{setSyncStatus('err');console.warn('push fail',e.message);schedulePushRetry();}
   }
   finally{syncBusy=false}
@@ -5220,6 +5240,7 @@ async function loginToProfile(profile,passcode,opts={}){
   syncAuthRequired=false;
   currentProfileId=profile.id;saveProfiles();
   try{
+    await validateSyncToken(profile,profile.masterKey);
     await cloudPull({force:true,throwOnError:true});
     localStorage.removeItem('wb_sync_off');
     setSyncStatus('ok');renderSyncBtn();
@@ -5228,7 +5249,7 @@ async function loginToProfile(profile,passcode,opts={}){
     sessionPasscode=null;
     syncAuthRequired=isSyncAuthError(e);
     if(opts.silent)throw e;
-    toast('登录失败：'+(e.message&&e.message.includes('decrypt')?'Passcode 错误':(e.message||e)));
+    toast('登录失败：'+syncErrorText(e));
     return false;
   }
 }
@@ -5236,6 +5257,7 @@ async function loginToProfile(profile,passcode,opts={}){
 /* 弹出登录框（输入 passcode 即"登录"，类似登录效果） */
 function promptLogin(profile){
   if(!profile||!profile.binId){toast('该账户尚未配置 Gist ID');return;}
+  if(!profile.masterKey){toast('请先在账户管理中更新 GitHub Token');return;}
   const defaultDays=7;
   modal(`<h4>登录云同步账户<span class="modal-close" onclick="closeModal()">×</span></h4>
     <p class="muted" style="margin:0 0 8px">正在登录：<b>${esc(profile.name)}</b>${MOCK_SYNC?' <span style="color:var(--ok)">（仅本地，不连接正式 Gist）</span>':''}</p>
@@ -5318,7 +5340,8 @@ function renderAccountManager(){
       : `<button class="acc-btn" data-switch="${esc(p.id)}">切换</button>`;
     const del=(syncProfiles.length>1)?`<button class="acc-btn danger" data-del="${esc(p.id)}">删除</button>`:'';
     const edit=`<button class="acc-btn" data-edit="${esc(p.id)}">编辑</button>`;
-    return `<div class="acc-row"><div class="acc-info"><div class="acc-name">${esc(p.name)}</div><div class="acc-gist">${p.login?('账号 '+esc(p.login)+' · '):''}Gist ${esc(maskGist(p.binId))}</div></div><div class="acc-acts">${acts}${edit}${del}</div></div>`;
+    const token=`<button class="acc-btn" data-token="${esc(p.id)}">更新 Token</button>`;
+    return `<div class="acc-row"><div class="acc-info"><div class="acc-name">${esc(p.name)}</div><div class="acc-gist">${p.login?('账号 '+esc(p.login)+' · '):''}Gist ${esc(maskGist(p.binId))}</div></div><div class="acc-acts">${acts}${token}${edit}${del}</div></div>`;
   }).join('');
   const trustDays=cur?getTrustRemainingDays(cur.id):0;
   const trustRow=cur&&trustDays>0?`<div class="sync-row"><span>本机信任</span><span style="font-size:13px">已记住 ${trustDays} 天 <button class="acc-btn danger" id="revokeTrust" style="margin-left:6px;padding:2px 8px;font-size:12px">撤销信任</button></span></div>`:'';
@@ -5350,6 +5373,7 @@ function renderAccountManager(){
   const s2=$('#syncStatus2'),ss=$('#syncStatus');if(s2&&ss){s2.className=ss.className;s2.textContent=ss.textContent;}
   $('#modalBox').querySelectorAll('[data-switch]').forEach(b=>b.onclick=()=>{const p=syncProfiles.find(x=>x.id===b.getAttribute('data-switch'));if(p)switchProfile(p);});
   $('#modalBox').querySelectorAll('[data-login]').forEach(b=>b.onclick=()=>{const p=syncProfiles.find(x=>x.id===b.getAttribute('data-login'));if(p){closeModal();promptLogin(p);}});
+  $('#modalBox').querySelectorAll('[data-token]').forEach(b=>b.onclick=()=>{const p=syncProfiles.find(x=>x.id===b.getAttribute('data-token'));if(p)updateAccountToken(p);});
   $('#modalBox').querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{deleteProfile(b.getAttribute('data-del'));});
   $('#modalBox').querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const p=syncProfiles.find(x=>x.id===b.getAttribute('data-edit'));if(p)editAccount(p);});
   $('#addAccBtn').onclick=addAccount;
@@ -5579,6 +5603,33 @@ function editAccount(p){
     p.name=($('#edName').value.trim()||'未命名账户');
     p.login=($('#edLogin').value.trim()||null);
     saveProfiles();closeModal();toast('账户已更新');renderAccountManager();
+  };
+}
+
+/* 更新 GitHub Token：先验证账户访问权，验证成功后才覆盖本机配置。 */
+function updateAccountToken(p){
+  if(!p)return;
+  modal(`<h4>更新 GitHub Token<span class="modal-close" onclick="closeModal()">×</span></h4>
+    <p class="muted" style="margin:0 0 10px">账户：<b>${esc(p.name)}</b><br>请输入新的 Token。Token 只保存在本机账户配置中，不会显示或上传到云端。</p>
+    <input id="newSyncToken" type="password" class="sync-input" placeholder="GitHub Token（需要 gist 权限）" autocomplete="off">
+    <div id="tokenErr" style="color:var(--bad);font-size:12px;min-height:16px;margin:4px 0 8px"></div>
+    <div class="btn-pair">
+      <button id="tokenCancel" style="flex:1;border:1px solid var(--line);border-radius:var(--r-sm);padding:11px">取消</button>
+      <button id="tokenSave" style="flex:1;background:var(--text);color:#fff;border-radius:var(--r-sm);padding:11px;font-weight:600">验证并保存</button>
+    </div>`,{noMaskClose:true});
+  $('#tokenCancel').onclick=()=>renderAccountManager();
+  $('#tokenSave').onclick=async()=>{
+    const token=$('#newSyncToken').value.trim();
+    if(!token){$('#tokenErr').textContent='请输入 GitHub Token';return;}
+    const btn=$('#tokenSave');btn.disabled=true;btn.textContent='验证中…';
+    try{
+      await validateSyncToken(p,token);
+      p.masterKey=token;saveProfiles();sessionPasscode=null;syncAuthRequired=false;setSyncStatus('off');renderSyncBtn();
+      closeModal();toast('Token 已更新，请重新登录');promptLogin(p);
+    }catch(e){
+      btn.disabled=false;btn.textContent='验证并保存';
+      $('#tokenErr').textContent='验证失败：'+syncErrorText(e);
+    }
   };
 }
 
