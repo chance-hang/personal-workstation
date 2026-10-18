@@ -2683,8 +2683,9 @@ async function restoreLocalSnapshot(){try{const snap=await readLocalMirror('curr
 
 /* ============ 弹窗 ============ */
 let modalOpts={};
-function closeModal(){$('#modalMask').classList.remove('show');$('#modalBox').innerHTML='';$('#modalBox').classList.remove('wide');$('#modalBox').classList.remove('xl');modalOpts={}}
+function closeModal(){$('#modalMask').classList.remove('show','pomo-modal-host');$('#modalBox').innerHTML='';$('#modalBox').classList.remove('wide');$('#modalBox').classList.remove('xl');modalOpts={}}
 function modal(html,opts={}){
+  $('#modalMask').classList.remove('pomo-modal-host');
   modalOpts=opts;
   $('#modalBox').className='modal';
   $('#modalBox').innerHTML=html;
@@ -7620,7 +7621,7 @@ const POMO_KEY=new URLSearchParams(location.search).get('mockSync')==='1'?'lifew
 const POMO_PHASES={focus:'专注',short:'短休息',long:'长休息'};
 const POMO_LIMITS={focus:180,short:60,long:120};
 const pomoOriginalTitle=document.title;
-let pomoStorageBlocked=false,pomoAudio=null,pomoRenderedDay='';
+let pomoStorageBlocked=false,pomoAudio=null,pomoRenderedDay='',pomoFocusReturnY=0;
 function pomoEmpty(){return {settings:{focus:25,short:5,long:15,sound:true},phase:'focus',round:0,timer:null,draft:{title:'',taskId:''},history:[],notice:'',revision:''}}
 function pomoStorageError(message){const el=$('#pomoStorageError');el.hidden=false;el.textContent=message;}
 function pomoRead(){
@@ -7673,16 +7674,49 @@ function pomoRefreshTasks(){
   if(select.innerHTML!==html)select.innerHTML=html;
   select.value=taskId||'';
 }
+/* 手机视口与悬浮计时：不创建第二个计时器或独立状态。 */
+function pomoViewport(){
+  const viewport=window.visualViewport;
+  document.documentElement.style.setProperty('--pomo-viewport-height',(viewport?viewport.height:innerHeight)+'px');
+  document.documentElement.style.setProperty('--pomo-viewport-top',(viewport?viewport.offsetTop:0)+'px');
+  pomoUpdateMini();
+}
+function pomoUpdateMini(){
+  const mini=$('#pomoMini'),timer=pomoState.timer;
+  const editing=document.activeElement&&document.activeElement.matches('input,textarea,select,[contenteditable="true"]');
+  const primary=$('#pomoPrimary'),rect=primary.getBoundingClientRect();
+  const topbar=$('header.topbar'),tabs=$('#tabbar');
+  const visibleTop=Math.max(0,topbar.getBoundingClientRect().bottom);
+  const visibleBottom=Math.min(innerHeight,tabs.getBoundingClientRect().top);
+  const primaryVisible=primary.getClientRects().length>0&&rect.top>=visibleTop&&rect.bottom<=visibleBottom;
+  const show=!!timer&&matchMedia('(max-width:759px)').matches&&!primaryVisible&&!editing&&!document.body.classList.contains('pomo-focus')&&!document.body.classList.contains('nav-open')&&!$('#modalMask').classList.contains('show');
+  mini.hidden=!show;
+  document.body.classList.toggle('pomo-mini-visible',show);
+  if(timer){
+    $('#pomoMiniTime').textContent=$('#pomoTime').textContent;
+    $('#pomoMiniTask').textContent=timer.phase==='focus'?timer.title:POMO_PHASES[timer.phase];
+    $('#pomoMiniToggle').textContent=timer.status==='running'?'暂停':'继续';
+    $('#pomoMiniToggle').setAttribute('aria-label',(timer.status==='running'?'暂停':'继续')+POMO_PHASES[timer.phase]);
+  }
+}
+function pomoModal(html,options){
+  modal(html,options);
+  $('#modalBox').classList.add('pomo-dialog');
+  $('#modalMask').classList.add('pomo-modal-host');
+  pomoViewport();
+}
 function pomoRenderClock(){
   const t=pomoState.timer,remaining=pomoRemaining(),seconds=Math.ceil(remaining/1000);
   $('#pomoTime').textContent=pad(Math.floor(seconds/60))+':'+pad(seconds%60);
   $('#pomoRing').style.setProperty('--progress',t?Math.min(100,Math.max(0,(1-remaining/t.duration)*100))+'%':'0%');
   $('#pomoPhaseLabel').textContent=t?(t.status==='paused'?'已暂停':t.phase==='focus'?'把注意力留在这里':'放松一下，也很重要'):pomoState.phase==='focus'?'准备好，就开始':'休息准备好了';
   document.title=t?'['+$('#pomoTime').textContent+'] '+(t.status==='paused'?'已暂停':POMO_PHASES[t.phase])+' · '+pomoOriginalTitle:pomoOriginalTitle;
+  pomoUpdateMini();
 }
 function renderPomodoro(){
   pomoRenderedDay=todayStr();
   const t=pomoState.timer,active=!!t;
+  $('#pomoSection .pomo-card').classList.toggle('is-timing',active);
   pomoRefreshTasks();
   $('#pomoTodo').disabled=active||pomoState.phase!=='focus';
   $('#pomoTask').disabled=active||pomoState.phase!=='focus';
@@ -7749,13 +7783,13 @@ function pomoPrimary(){
 function pomoStop(){
   pomoTick();const timer=pomoState.timer;if(!timer)return;
   if(timer.phase!=='focus'){pomoFinish(true);return;}
-  modal(`<h4>先停在这里也没关系</h4><p class="muted">本轮不计为完整番茄，已经投入的时间仍会保留。</p><div class="field"><label for="pomoReason">结束原因（可选）</label><select id="pomoReason" class="sync-input"><option value="">暂不填写</option><option>临时有事</option><option>有些分心</option><option>任务已完成</option><option>需要调整计划</option></select></div><label for="pomoStopNote">记下一点进展（可选）</label><textarea id="pomoStopNote" class="pomo-summary-input" maxlength="500" placeholder="刚刚完成了什么？"></textarea><div class="btns"><button class="cancel" onclick="closeModal()">继续这一轮</button><button class="ok" id="pomoConfirmStop">结束并记录</button></div>`,{noMaskClose:true});
+  pomoModal(`<h4>先停在这里也没关系</h4><p class="muted">本轮不计为完整番茄，已经投入的时间仍会保留。</p><div class="field"><label for="pomoReason">结束原因（可选）</label><select id="pomoReason" class="sync-input"><option value="">暂不填写</option><option>临时有事</option><option>有些分心</option><option>任务已完成</option><option>需要调整计划</option></select></div><label for="pomoStopNote">记下一点进展（可选）</label><textarea id="pomoStopNote" class="pomo-summary-input" maxlength="500" placeholder="刚刚完成了什么？"></textarea><div class="btns"><button class="cancel" onclick="closeModal()">继续这一轮</button><button class="ok" id="pomoConfirmStop">结束并记录</button></div>`,{noMaskClose:true});
   const timerId=timer.id;
   $('#pomoConfirmStop').onclick=()=>{const latest=pomoRead();if(!latest.timer||latest.timer.id!==timerId){closeModal();return;}if(pomoFinish(true,$('#pomoReason').value,$('#pomoStopNote').value.trim()))closeModal();};
 }
 function pomoSummary(recordId){
   const record=pomoState.history.find(x=>x.id===recordId);if(!record)return;
-  modal(`<h4>留下一点专注的收获</h4><p class="muted">${esc(record.title)} · ${pomoMinutes(record.duration)}</p><label class="pomo-sr" for="pomoSummary">本轮小结</label><textarea id="pomoSummary" class="pomo-summary-input" maxlength="500" ${record.logged?'readonly':''} placeholder="这一轮做了什么，下一步是什么？">${esc(record.note||'')}</textarea><label style="display:flex;gap:8px;align-items:center;font-size:12px;margin:12px 0"><input id="pomoWriteLog" type="checkbox" ${record.logged?'checked disabled':''}>${record.logged?'已写入工作日志，如需修改请到工作日志编辑':'同时写入工作日志（随日志同步）'}</label><div class="btns"><button class="cancel" onclick="closeModal()">关闭</button><button class="ok" id="pomoSaveSummary">保存小结</button></div>`,{noMaskClose:true});
+  pomoModal(`<h4>留下一点专注的收获</h4><p class="muted">${esc(record.title)} · ${pomoMinutes(record.duration)}</p><label class="pomo-sr" for="pomoSummary">本轮小结</label><textarea id="pomoSummary" class="pomo-summary-input" maxlength="500" ${record.logged?'readonly':''} placeholder="这一轮做了什么，下一步是什么？">${esc(record.note||'')}</textarea><label style="display:flex;gap:8px;align-items:center;font-size:12px;margin:12px 0"><input id="pomoWriteLog" type="checkbox" ${record.logged?'checked disabled':''}>${record.logged?'已写入工作日志，如需修改请到工作日志编辑':'同时写入工作日志（随日志同步）'}</label><div class="btns"><button class="cancel" onclick="closeModal()">关闭</button><button class="ok" id="pomoSaveSummary">保存小结</button></div>`,{noMaskClose:true});
   $('#pomoSaveSummary').onclick=()=>{
     const next=pomoRead(),entry=next.history.find(x=>x.id===recordId);if(!entry)return;if(entry.logged){closeModal();return;}
     const note=$('#pomoSummary').value.trim(),write=$('#pomoWriteLog').checked;
@@ -7776,7 +7810,7 @@ $('#pomoPrimary').onclick=pomoPrimary;
 $('#pomoStop').onclick=pomoStop;
 $$('[data-pomo-mode]').forEach(button=>button.onclick=()=>{const next=pomoRead();if(next.timer)return;next.phase=button.dataset.pomoMode;next.notice='';if(pomoStore(next))renderPomodoro();});
 $('#pomoTodo').onchange=()=>{const next=pomoRead();if(next.timer)return;const task=S.todos.find(x=>x.id===$('#pomoTodo').value);next.draft={taskId:task?task.id:'',title:task?task.text:''};if(pomoStore(next))renderPomodoro();};
-$('#pomoTask').onchange=()=>{const next=pomoRead();if(next.timer)return;next.draft={taskId:$('#pomoTodo').value,title:$('#pomoTask').value.trim().slice(0,100)};pomoStore(next);};
+$('#pomoTask').oninput=()=>{const next=pomoRead();if(next.timer)return;next.draft={taskId:$('#pomoTodo').value,title:$('#pomoTask').value.trim().slice(0,100)};pomoStore(next);};
 $('#pomoSettingsForm').onsubmit=event=>{
   event.preventDefault();const next=pomoRead();if(next.timer){toast('结束当前计时后再调整时长');return;}
   const settings={sound:$('#pomoSoundEnabled').checked};
@@ -7786,7 +7820,14 @@ $('#pomoSettingsForm').onsubmit=event=>{
   }
   next.settings=settings;if(pomoStore(next)){renderPomodoro();$('#pomoSettings').open=false;toast('新的专注节奏已保存');}
 };
-$('#pomoFocusView').onclick=()=>{const focused=document.body.classList.toggle('pomo-focus');$('#pomoFocusView').textContent=focused?'退出专注模式 ↙':'进入专注模式 ↗';$('#pomoFocusView').setAttribute('aria-pressed',String(focused));};
+$('#pomoFocusView').onclick=()=>{
+  const entering=!document.body.classList.contains('pomo-focus');if(entering)pomoFocusReturnY=scrollY;
+  document.body.classList.toggle('pomo-focus',entering);
+  $('#pomoFocusView').textContent=entering?'退出专注模式 ↙':'进入专注模式 ↗';
+  $('#pomoFocusView').setAttribute('aria-pressed',String(entering));
+  if(entering)$('#pomoSection').scrollTop=0;else window.scrollTo({top:pomoFocusReturnY,behavior:'instant'});
+  pomoViewport();
+};
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&document.body.classList.contains('pomo-focus'))$('#pomoFocusView').click();});
 $('#todayGoPomodoro').onclick=()=>{
   const config=moduleCfg.find(x=>x.id==='pomodoro');if(config&&!config.visible){config.visible=true;saveModuleConfig(moduleCfg);applyModuleLayout();}
@@ -7795,6 +7836,18 @@ $('#todayGoPomodoro').onclick=()=>{
 window.addEventListener('storage',event=>{if(event.key===POMO_KEY||event.key===null){pomoState=pomoRead();renderPomodoro();pomoTick();}});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')pomoTick();});
 window.addEventListener('pageshow',pomoTick);
+$('#pomoMiniToggle').onclick=pomoPrimary;
+$('#pomoMiniOpen').onclick=()=>{goTab('today',{scrollTo:'#pomoSection'});$('#pomoSection').scrollIntoView({block:'start',behavior:'smooth'});};
+$('#pomoTask').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.isComposing){event.preventDefault();event.target.blur();}});
+let pomoMobileFrame=0;
+function pomoScheduleMobile(){if(!pomoMobileFrame)pomoMobileFrame=requestAnimationFrame(()=>{pomoMobileFrame=0;pomoViewport();});}
+window.addEventListener('scroll',pomoScheduleMobile,{passive:true});
+window.addEventListener('resize',pomoScheduleMobile);
+document.addEventListener('focusin',pomoScheduleMobile);
+document.addEventListener('focusout',pomoScheduleMobile);
+document.addEventListener('click',pomoScheduleMobile);
+if(window.visualViewport){visualViewport.addEventListener('resize',pomoScheduleMobile);visualViewport.addEventListener('scroll',pomoScheduleMobile);}
+pomoViewport();
 setInterval(pomoTick,1000);
 pomoTick();
 

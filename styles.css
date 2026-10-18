@@ -668,9 +668,15 @@ nav.tabbar a.on .ic{transform:scale(1.05)}
 .pomo-task-stats span{font-size:10px;color:var(--text-2);background:var(--card-soft);border:1px solid var(--line);border-radius:6px;padding:4px 7px;max-width:100%;overflow-wrap:anywhere}
 .pomo-sr{position:absolute!important;width:1px;height:1px;padding:0!important;margin:-1px!important;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
 .pomo-summary-input{width:100%;min-height:90px;padding:10px;border:1px solid var(--line);border-radius:var(--r-sm);font:inherit;resize:vertical}
+.pomo-mini{display:none}
+.pomo-modal-host{top:var(--pomo-viewport-top,0px);bottom:auto;height:var(--pomo-viewport-height,100vh);padding:12px max(12px,env(safe-area-inset-right,0px)) 12px max(12px,env(safe-area-inset-left,0px))}
+.modal.pomo-dialog{max-height:calc(var(--pomo-viewport-height,100vh) - 24px);overflow-y:auto;overscroll-behavior:contain;scroll-padding-block:12px 64px;-webkit-overflow-scrolling:touch}
+.pomo-dialog .btns{position:sticky;bottom:-1px;background:var(--card);padding-top:10px;z-index:1}
+.pomo-dialog .btns button{min-height:44px}
 body.pomo-focus{overflow:hidden}
+body.pomo-focus #page-today{animation:none}
 body.pomo-focus .side-toggle,body.pomo-focus .side-nav,body.pomo-focus .nav-mask{visibility:hidden}
-body.pomo-focus #pomoSection{position:fixed;inset:0;z-index:55;background:var(--bg);overflow-y:auto;padding:30px 18px;margin:0;display:block!important}
+body.pomo-focus #pomoSection{position:fixed;inset:0;z-index:55;background:var(--bg)!important;animation:none!important;overflow-y:auto;padding:30px 18px;margin:0;display:block!important}
 body.pomo-focus #pomoSection>.page-title{max-width:760px;margin:0 auto 14px}
 body.pomo-focus .pomo-card{max-width:760px;margin:0 auto;box-shadow:var(--shadow)}
 body.pomo-focus .pomo-secondary{display:none}
@@ -678,16 +684,72 @@ body.pomo-focus .pomo-layout{min-height:50vh}
 body.pomo-focus .pomo-clock{width:240px;height:240px}
 body.pomo-focus .pomo-clock strong{font-size:58px}
 @media(max-width:599px){
-  .pomo-card{padding:18px}
-  .pomo-layout{grid-template-columns:1fr;gap:20px;padding-bottom:20px}
+  .pomo-card{padding:16px}
+  .pomo-card button,.pomo-settings summary{min-height:44px;touch-action:manipulation}
+  .pomo-layout{grid-template-columns:1fr;gap:14px;padding-bottom:16px}
+  .pomo-clock{width:168px;height:168px}
+  .pomo-clock strong{font-size:44px}
+  .pomo-clock-wrap{gap:10px}
+  .pomo-modes{margin-bottom:14px;max-width:none}
+  .pomo-heading{margin-bottom:12px}
+  .pomo-eyebrow{font-size:8px;letter-spacing:1px}
   .pomo-heading h3{font-size:21px}
-  .pomo-heading .pomo-quiet{font-size:10px;padding:8px}
+  .pomo-heading .pomo-quiet{font-size:12px;padding:8px 10px}
   .pomo-task{text-align:center}
-  .pomo-controls{justify-content:center}
+  .pomo-task select,.pomo-task>input,.pomo-settings-grid input,.pomo-dialog input:not([type="checkbox"]),.pomo-dialog select,.pomo-summary-input{font-size:16px;min-height:44px}
+  .pomo-task>label{font-size:14px}
+  .pomo-controls{justify-content:center;flex-wrap:nowrap}
+  .pomo-controls .pomo-primary{flex:1;font-size:16px;min-height:48px}
+  .pomo-controls .pomo-quiet{min-height:48px;font-size:14px;padding-inline:14px}
+  .pomo-card button:focus-visible,.pomo-mini button:focus-visible{outline:2px solid var(--pomo-accent,#a95f4b);outline-offset:3px}
+  .pomo-footnote{font-size:12px}
+  .pomo-hint{font-size:13px;margin-block:10px 14px}
   .pomo-stats strong{font-size:17px}
-  .pomo-settings summary span{font-size:9px}
-  body.pomo-focus #pomoSection{padding:18px 12px}
+  .pomo-stats span{font-size:11px}
+  .pomo-settings{padding-block:6px}
+  .pomo-settings summary{font-size:14px;display:flex;align-items:center;justify-content:space-between;gap:6px;list-style:none}
+  .pomo-settings summary::-webkit-details-marker{display:none}
+  .pomo-settings summary::before{content:'＋';color:var(--pomo-accent)}
+  .pomo-settings[open] summary::before{content:'−'}
+  .pomo-settings summary span{font-size:11px;float:none}
+  .pomo-settings-grid{gap:8px}
+  .pomo-settings-grid label{font-size:11px}
+  .pomo-settings-bottom label,.pomo-dialog label:has(input[type="checkbox"]){min-height:44px}
+  .pomo-settings-bottom input[type="checkbox"],.pomo-dialog input[type="checkbox"]{width:20px;height:20px;flex:none}
+  .pomo-history-heading{align-items:flex-start}
+  .pomo-history-heading h4{font-size:13px}
+  .pomo-history-heading span{font-size:11px;white-space:nowrap}
+  .pomo-record button{min-width:64px;min-height:44px;font-size:12px;padding:6px}
+  .pomo-record-main small{font-size:12px}
+  .pomo-task-stats span{font-size:11px}
+  .pomo-dialog .btns button{font-size:15px;min-height:48px}
+  body.pomo-focus #pomoSection{top:var(--pomo-viewport-top,0px);bottom:auto;height:var(--pomo-viewport-height,100dvh);padding:max(12px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px));overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+  body.pomo-focus .pomo-heading{position:sticky;top:-1px;z-index:2;background:var(--card);padding-block:4px;margin-top:-4px}
+  body.pomo-focus .pomo-clock{width:184px;height:184px}
+  body.pomo-focus .pomo-clock strong{font-size:50px}
+  body.pomo-focus .pomo-card.is-timing .pomo-modes,body.pomo-focus .pomo-card.is-timing .pomo-task>label,body.pomo-focus .pomo-card.is-timing .pomo-task>input,body.pomo-focus .pomo-card.is-timing .pomo-task>select{display:none}
   body.pomo-focus .pomo-layout{min-height:0}
+}
+@media(max-width:759px){
+  .pomo-mini:not([hidden]){position:fixed;z-index:48;left:max(12px,env(safe-area-inset-left,0px));right:max(12px,env(safe-area-inset-right,0px));bottom:calc(var(--tab-h) + env(safe-area-inset-bottom,0px) + 8px);display:flex;align-items:center;gap:8px;padding:6px 8px 6px 12px;background:var(--card);border:1px solid #d5b2a6;border-radius:14px;box-shadow:0 4px 18px #0002;color:var(--text)}
+  .pomo-mini-open{display:flex;align-items:center;gap:12px;text-align:left;min-width:0;flex:1;min-height:44px;padding:0;touch-action:manipulation}
+  .pomo-mini-open strong{font-size:23px;color:#a95f4b;font-variant-numeric:tabular-nums;flex:none}
+  .pomo-mini-open span{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pomo-mini-toggle{min-width:64px;min-height:44px;border-radius:9px;background:#f8eee9;color:#824734;font-size:14px;touch-action:manipulation}
+  body.pomo-mini-visible main{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom,0px) + 100px)}
+}
+@media(pointer:coarse){
+  .pomo-card button,.pomo-dialog button{min-height:44px;touch-action:manipulation}
+  .pomo-task select,.pomo-task>input,.pomo-settings-grid input,.pomo-dialog input:not([type="checkbox"]),.pomo-dialog select,.pomo-summary-input{font-size:16px;min-height:44px}
+}
+@media(max-height:500px) and (orientation:landscape){
+  body.pomo-focus #pomoSection{height:var(--pomo-viewport-height,100dvh);top:var(--pomo-viewport-top,0px);bottom:auto;padding:12px max(16px,env(safe-area-inset-right,0px)) max(12px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+  body.pomo-focus .pomo-heading{position:sticky;top:0;z-index:2;background:var(--card)}
+  body.pomo-focus .pomo-layout{min-height:0}
+  body.pomo-focus .pomo-clock{width:156px;height:156px}
+  body.pomo-focus .pomo-clock strong{font-size:42px}
+  body.pomo-focus .pomo-modes{margin-bottom:8px}
+  body.pomo-focus .pomo-card button{min-height:44px}
 }
 @media(prefers-reduced-motion:reduce){.pomo-card *{transition:none!important}}
 

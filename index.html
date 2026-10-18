@@ -5,7 +5,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="我的工作台">
@@ -101,7 +101,7 @@
               <label for="pomoTodo">这一轮，想完成什么？</label>
               <select id="pomoTodo"><option value="">临时任务 / 自由专注</option></select>
               <label class="pomo-sr" for="pomoTask">专注任务名称</label>
-              <input id="pomoTask" maxlength="100" placeholder="例如：读完一章，或整理本周总结">
+              <input id="pomoTask" maxlength="100" enterkeyhint="done" placeholder="例如：读完一章，或整理本周总结">
               <p id="pomoHint" class="pomo-hint">不用一次做完，只为它留出一段时间。</p>
               <div class="pomo-controls">
                 <button id="pomoPrimary" class="pomo-primary">开始专注</button>
@@ -122,9 +122,9 @@
               <summary>调整节奏 <span>默认 25 / 5 / 15 分钟</span></summary>
               <form id="pomoSettingsForm">
                 <div class="pomo-settings-grid">
-                  <label>专注（分钟）<input id="pomoFocusMinutes" type="number" min="1" max="180" step="1" required value="25"></label>
-                  <label>短休息（分钟）<input id="pomoShortMinutes" type="number" min="1" max="60" step="1" required value="5"></label>
-                  <label>长休息（分钟）<input id="pomoLongMinutes" type="number" min="1" max="120" step="1" required value="15"></label>
+                  <label>专注（分钟）<input id="pomoFocusMinutes" type="number" inputmode="numeric" min="1" max="180" step="1" required value="25"></label>
+                  <label>短休息（分钟）<input id="pomoShortMinutes" type="number" inputmode="numeric" min="1" max="60" step="1" required value="5"></label>
+                  <label>长休息（分钟）<input id="pomoLongMinutes" type="number" inputmode="numeric" min="1" max="120" step="1" required value="15"></label>
                 </div>
                 <div class="pomo-settings-bottom"><label><input id="pomoSoundEnabled" type="checkbox" checked> 结束提示音</label><button class="pomo-quiet" type="submit" id="pomoSettingsSave">保存设置</button></div>
                 <p class="pomo-footnote">每完成 4 轮专注，安排一次长休息。提醒需页面保持打开；休眠后返回会校准时间。</p>
@@ -570,10 +570,17 @@
 
 <div class="toast" id="toast"></div>
 
+<div class="pomo-mini" id="pomoMini" role="group" aria-label="当前番茄计时" hidden>
+  <button id="pomoMiniOpen" class="pomo-mini-open" aria-label="返回番茄时钟">
+    <strong id="pomoMiniTime">25:00</strong><span id="pomoMiniTask">专注中</span>
+  </button>
+  <button id="pomoMiniToggle" class="pomo-mini-toggle">暂停</button>
+</div>
+
 <!-- 通用弹窗 -->
 <div class="modal-mask" id="modalMask"><div class="modal" id="modalBox"></div></div>
 
 
-  <script src="app.js?v=review-pomodoro-20261018-1"></script>
+  <script src="app.js?v=review-pomodoro-mobile-20261018-1"></script>
 </body>
 </html>
