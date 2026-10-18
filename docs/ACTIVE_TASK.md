@@ -1,70 +1,28 @@
 # ACTIVE TASK
 
-最后更新：2026-09-15（Prod 云同步缓存版本阻断修复已发布）
+最后更新：2026-10-18
 
 ## 当前状态
 
-`Completed / Accepted`
+`Awaiting User Acceptance`：番茄时钟待验收版本，自检已通过；提交与推送仅限本 review 分支。
 
-- 当前 review 分支：`review/cloud-cache-bust-fix`
-- 当前提交：`b79484c24fe4a333aa09abc450214e3a8ce77dfb`
-- 来源基线：Prod `main` `db584f6a87020de25c40670fd5d576ffc0f3bb63`
-- 来源基线：Prod `main` `8b8b87d0a87f9cf43ad1d03cad04ba43e290c4b5`
-- 来源基线：Prod `main` `e7478eac97499b5399d9392929009e166c4fd0f5`
-- 已完成 Prod 原生同步模型迁移验证，不再依赖 Test source 或 Test remote。
-- 发布范围：仅更新 Prod 首页脚本版本参数，确保客户端加载已发布的 Token 写入权限修复。
-- 必须保留：Prod 登录、无前缀 localStorage、Gist、IndexedDB、导入导出、初始化顺序及其余业务逻辑。
-- 禁止：直接 cherry-pick Test 提交、`_syncV2`、CRDT、字段级版本系统及任何无关业务改动。
-- 目标分支：`main`；用户已明确授权，Prod 已完成快进升级。
+- 用户授权：先实现到待验收版本，查看效果后再决定，不发布正式版。
+- Source：Prod `main` / `origin/main` `18f6fb57b520dccd6f2941487ec5e634b4b80701`。
+- 当前分支：`review/pomodoro-clock`。
+- 目标：仅本 review 分支；不合并或发布到 `main`。
+- 范围：今日页番茄时钟、待办关联、专注/休息、暂停恢复、自定义时长、专注模式、本机统计和记录、可选写入工作日志。
+- 允许修改：`index.html`、`styles.css`、`app.js`、本任务说明、验收文档及相关自动验证脚本。
+- 必须保留：正式登录、正式 Gist 路径与协议、原 localStorage 命名空间、IndexedDB 镜像、导入导出及原页面初始化顺序。
+- 新番茄数据使用独立本机存储，Mock 与正式键分离；计时器不跨设备同步。用户明确写入工作日志后，该日志沿用原同步方式。
+- 验收只能使用本地 Mock，不使用正式账户、Token 或 Gist。
+- 验证：浏览器真实交互、结束与中断、短/长休息、刷新与后台时间恢复、重复完成防护、设置校验、移动端布局以及现有 Mock 双端同步回归。
 
-## 当前优先级
+## 优先级与停止点
 
-- `P0 Completed / Accepted`：Prod 云同步缓存版本阻断修复已完成自检并发布到 `main`。
-- 没有 P1 Queued。
-- `P2 Backlog`：等待用户或项目负责人派发新发布任务；新发布到达前 Executor 不主动实施任何变更。
+- P0：本番茄时钟待验收实现。
+- 无 P1。
+- P2：其他未授权功能与正式发布。
 
-## STOP 状态机
+14 组功能检查、原有 12 项同步合并检查及 Mock 冒烟通过。详见 `docs/POMODORO_ACCEPTANCE.md`。
 
-按 `GLOBAL_RULES.md §10`：
-
-- `Awaiting User Acceptance`：Codex 自检、自动验证和本地 Mock 验收完成后等待用户人工验收。
-- `Blocked`：缺信息 / 冲突 / 依赖未到位。
-- `Completed / Accepted`：用户人工验收通过，按用户授权进入下一 Task 或执行发布；ChatGPT Review 不是必要门禁。
-
-Prod 发布期间 Executor 完成 commit / push 和必要自检后停在 `Awaiting User Acceptance`；用户明确同意发布后才可推进到 Prod `main` 合并。
-
-## 当前结构
-
-正式库当前采用：
-
-- `index.html`
-- `styles.css`
-- `app.js`
-
-## 长期角色
-
-本仓库是正式发布区，不是日常开发入口。
-
-常规流程：
-
-Prod `review/*` 开发 → Codex 自检与自动验证 → 本地 Mock 验收 → 用户人工验收 → 按 `docs/RELEASE.md` 执行受控发布 → 用户确认 Prod 验收 → `Completed / Accepted`。ChatGPT 可提供建议，但不是发布门禁。已退休的 Test 仓库不再作为 source 或 remote。
-
-## 当前要求
-
-Executor 读取本文件后，如果没有新的 ChatGPT 指令或新的发布任务：
-
-- 不创建新分支
-- 不修改业务代码
-- 不主动恢复或同步已退休的 Test 仓库
-- 不从 Test remote 获取发布内容
-- 不执行历史任务
-- 不把 P2 Backlog 自行提升为 P0
-- 保持 `main` 为当前稳定正式基线
-
-下一次正式发布开始时，由用户或 Codex 更新本文件并把对应发布任务升为 `P0 Active`，并明确：
-
-- Source Prod review commit
-- 发布范围
-- 必须保留的 Prod 差异
-- 目标分支
-- 验证要求
+保留 review 版本供用户验收；未经用户明确发布授权，不合并 `main`，不修改正式网页。

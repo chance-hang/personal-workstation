@@ -65,6 +65,7 @@
         </div>
       </div>
       <div class="today-actions" aria-label="今日快捷操作">
+        <button class="today-action" id="todayGoPomodoro">◷ 专注</button>
         <button class="today-action" id="todayGoTodo">＋ 待办</button>
         <button class="today-action" id="todayGoMoney">＋ 记账</button>
         <button class="today-action" id="todayGoHabit">✓ 打卡</button>
@@ -75,6 +76,69 @@
         <div class="qn-tx"><div class="t">速记录入</div><div class="s">粘贴手机记录，自动拆分到各模块（记为今天）</div></div>
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-3)"><path d="M9 18l6-6-6-6"/></svg>
       </button>
+      <section class="sec" data-module="pomodoro" id="pomoSection" aria-label="番茄时钟">
+        <div class="page-title">番茄时钟 · 把时间留给眼前这件事</div>
+        <div class="card pomo-card">
+          <div class="pomo-heading">
+            <div><span class="pomo-eyebrow">ONE THING AT A TIME</span><h3>专注一下</h3></div>
+            <button id="pomoFocusView" class="pomo-quiet" aria-pressed="false">进入专注模式 ↗</button>
+          </div>
+          <div class="pomo-modes" role="group" aria-label="计时类型">
+            <button data-pomo-mode="focus" aria-pressed="true">专注</button>
+            <button data-pomo-mode="short" aria-pressed="false">短休息</button>
+            <button data-pomo-mode="long" aria-pressed="false">长休息</button>
+          </div>
+          <div class="pomo-layout">
+            <div class="pomo-clock-wrap">
+              <div class="pomo-clock" id="pomoRing">
+                <span id="pomoPhaseLabel">准备好，就开始</span>
+                <strong id="pomoTime" role="timer" aria-label="剩余时间">25:00</strong>
+                <span id="pomoRound">第 1 / 4 轮</span>
+              </div>
+              <div class="pomo-cycle" id="pomoCycle" aria-label="本组专注进度"></div>
+            </div>
+            <div class="pomo-task">
+              <label for="pomoTodo">这一轮，想完成什么？</label>
+              <select id="pomoTodo"><option value="">临时任务 / 自由专注</option></select>
+              <label class="pomo-sr" for="pomoTask">专注任务名称</label>
+              <input id="pomoTask" maxlength="100" placeholder="例如：读完一章，或整理本周总结">
+              <p id="pomoHint" class="pomo-hint">不用一次做完，只为它留出一段时间。</p>
+              <div class="pomo-controls">
+                <button id="pomoPrimary" class="pomo-primary">开始专注</button>
+                <button id="pomoStop" class="pomo-quiet" hidden>提前结束</button>
+              </div>
+              <p class="pomo-footnote">切页、刷新后仍可恢复。计时结束后，由你开始下一轮。</p>
+            </div>
+          </div>
+          <div id="pomoNotice" class="pomo-notice" role="status" hidden></div>
+          <p id="pomoStorageError" class="pomo-error" role="alert" hidden></p>
+          <div class="pomo-secondary">
+            <div class="pomo-stats">
+              <div><strong id="pomoCount">0</strong><span>今日完成 · 番茄</span></div>
+              <div><strong id="pomoMinutes">0 分钟</strong><span>今日累计专注</span></div>
+              <div><strong id="pomoTaskCount">0</strong><span>投入过的任务</span></div>
+            </div>
+            <details class="pomo-settings" id="pomoSettings">
+              <summary>调整节奏 <span>默认 25 / 5 / 15 分钟</span></summary>
+              <form id="pomoSettingsForm">
+                <div class="pomo-settings-grid">
+                  <label>专注（分钟）<input id="pomoFocusMinutes" type="number" min="1" max="180" step="1" required value="25"></label>
+                  <label>短休息（分钟）<input id="pomoShortMinutes" type="number" min="1" max="60" step="1" required value="5"></label>
+                  <label>长休息（分钟）<input id="pomoLongMinutes" type="number" min="1" max="120" step="1" required value="15"></label>
+                </div>
+                <div class="pomo-settings-bottom"><label><input id="pomoSoundEnabled" type="checkbox" checked> 结束提示音</label><button class="pomo-quiet" type="submit" id="pomoSettingsSave">保存设置</button></div>
+                <p class="pomo-footnote">每完成 4 轮专注，安排一次长休息。提醒需页面保持打开；休眠后返回会校准时间。</p>
+              </form>
+            </details>
+            <div class="pomo-history">
+              <div class="pomo-history-heading"><h4>今天，把时间花在了这里</h4><span>记录保存在本机</span></div>
+              <div id="pomoTaskStats"></div>
+              <div id="pomoHistory"><p class="pomo-empty">你的第一段专注，从现在开始。</p></div>
+              <p class="pomo-footnote">如需随工作台备份或同步，可在小结中选择写入工作日志。</p>
+            </div>
+          </div>
+        </div>
+      </section>
       <div class="sec" data-module="worklog">
         <div class="page-title">今日已做 · 工作日志</div>
         <div class="card">
@@ -510,6 +574,6 @@
 <div class="modal-mask" id="modalMask"><div class="modal" id="modalBox"></div></div>
 
 
-  <script src="app.js?v=prod-acct-name-sync-20260915-1"></script>
+  <script src="app.js?v=review-pomodoro-20261018-1"></script>
 </body>
 </html>
