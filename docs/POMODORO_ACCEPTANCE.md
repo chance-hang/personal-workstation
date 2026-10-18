@@ -8,6 +8,30 @@
 
 ## 体验入口
 
+### 直接预览完整网页
+
+不要把仓库的 `index.html` 单独当成网页附件打开：它依赖相邻的 `styles.css`、`app.js` 和本地 Mock 服务，附件预览没有这些资源时会出现无样式、大图标和无交互。
+
+生成可独立打开的待验收 HTML（内嵌当前分支的全部 CSS/JS）：
+
+```bash
+python3 tools/build-review-preview.py --output /workspace/.cloud-setup-personal-workstation/pomodoro-review/pomodoro-review.html
+```
+
+打开生成的 `pomodoro-review.html`。它内置浏览器内 Mock，无需启动服务器；只使用预览专属存储与数据库，并替换默认账户，不连接正式 Gist。浏览器限制持久存储时自动使用内存，并明确提示关闭后数据会丢失。原始应用文件保持分离，未修改正式版资源加载方式。
+
+这个入口用于单机交互验收；不模拟真实跨设备/双源云同步。正式的双端 Mock 验收继续使用下面的服务入口。
+
+验证完整交付文件（不依赖相邻资源与后台服务）：
+
+```bash
+python3 tools/check-review-preview.py
+```
+
+验证通过：隔离文档中的样式、图标尺寸、脚本初始化、存储受限回退、计时/暂停/完成、小结与内置 Mock、专注模式、手机/桌面布局、刷新恢复和正式存储隔离；零外部网络请求、零未捕获脚本错误。云端 Chromium 策略禁止 `file:` 导航，因此使用无基础路径的独立 HTML 文档与内存提供的独立来源验证，不关闭浏览器策略。
+
+### 通过本地 Mock 服务验收
+
 按 `docs/LOCAL_ACCEPTANCE.md` 在仓库根目录运行：
 
 ```bash
