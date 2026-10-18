@@ -2,7 +2,9 @@
 
 ## 当前状态
 
-Release Ready — v3.22.0 番茄时钟与手机体验优化。
+Awaiting Prod Acceptance — v3.22.0 已推送正式 `main`。
+
+发布内容提交：`0b69618f1cfb3c5819b73d53195f4dc024a2f54b`，发布分支与远端 `main` 已核对一致。正式网页与构建状态受当前环境代理 403 限制，尚未确认，待用户人工验收。
 
 用户已明确授权发布。发布源为 `review/pomodoro-clock` `97900de1c8ad224c2c2c3a41cbcf8bdfff1a75b0`；Prod 回滚基线为 `18f6fb57b520dccd6f2941487ec5e634b4b80701`。
 

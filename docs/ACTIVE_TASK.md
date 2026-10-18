@@ -4,13 +4,13 @@
 
 ## 当前状态
 
-`P0 Active`：发布已验收的番茄时钟与手机体验优化（v3.22.0）。
+`Awaiting User Acceptance`：v3.22.0 已成功推送正式库 `main`，等待正式网页人工验收。
 
 - 用户明确授权：可以，将当前待验收版本更新到正式库。
 - 已验收 Source：`review/pomodoro-clock` `97900de1c8ad224c2c2c3a41cbcf8bdfff1a75b0`，标记 `Release Ready`。
 - Prod 回滚基线：`18f6fb57b520dccd6f2941487ec5e634b4b80701`。
 - 发布分支：`release/pomodoro-v3.22.0`，从已核对的 `origin/main` 创建，仅集成该 review。
-- 目标：`main`；用户已授权发布，无需重复请求批准。
+- 目标：`main`；用户已授权且已完成推送。当前分支 `main`，发布内容提交为 `0b69618f1cfb3c5819b73d53195f4dc024a2f54b`，远端已核对一致。
 - 发布范围：番茄时钟、关联待办、专注/休息、暂停与刷新恢复、本机记录与可选写日志、手机触控/悬浮条/弹窗/专注模式、离线预览工具及相关测试文档。
 - 允许修改：`app.js`、`index.html`、`styles.css`、相关 `tools/*pomodoro*` / `tools/*review-preview*`、`docs/ACTIVE_TASK.md`、`docs/RELEASE.md`、`docs/RELEASE_HISTORY.md`、`docs/POMODORO_ACCEPTANCE.md`。
 - 发布准备额外改动：版本/更新记录、CSS 与 JS 缓存参数、预览生成器对带版本 CSS 地址的支持、正式模式隔离验证；不扩大功能范围。
@@ -24,10 +24,10 @@
 
 发布前检查全部通过：正式模式本机计时和旧数据保留、保护区代码一致性、14 组功能与 12 项合并检查、5 种设备触控模拟、单文件交互与尺寸切换、语法与差异检查。回滚 bundle 已验证可读且含完整原 Prod 历史。
 
-发布前重跑必要检查，备份 Prod 基线并检查保护区代码，保存发布说明后推送发布分支，再更新 `main`。发布后状态为 `Awaiting User Acceptance`，等待用户确认正式网页；不擅自将尚未完成的线上人工验收标为通过。
+发布分支已推送并快进合并至 `main`，未重写历史。所有发布前检查通过，回滚 bundle 已验证。等待用户确认正式网页；当前网络代理持续对 Pages 和部署 API 返回 403，线上构建结果尚未验证，不将人工验收标为通过。
 
 ## 优先级
 
-- P0：本次受控发布。
+- P0：本次受控发布已执行，等待正式版验收；不开展其他变更。
 - 无 P1。
 - P2：其他功能，不实施。
