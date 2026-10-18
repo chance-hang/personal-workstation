@@ -4,7 +4,7 @@
 
 基线：`origin/main` `18f6fb57b520dccd6f2941487ec5e634b4b80701`。
 
-仅供本地 Mock 验收，未授权合并或发布正式版。
+review 已获用户认可，并于 2026-10-18 明确授权发布 v3.22.0。验收来源为 `97900de1c8ad224c2c2c3a41cbcf8bdfff1a75b0`，标记 `Release Ready`。所有自动验证仍使用本地 Mock、离线适配或阻止外部请求的隔离浏览器；正式发布记录见 `docs/RELEASE.md` 和 `docs/RELEASE_HISTORY.md`。
 
 ## 体验入口
 
@@ -115,4 +115,11 @@ python3 tools/check-pomodoro.py --screenshots /workspace/.cloud-setup-personal-w
 
 未验证：真实设备扬声器提醒、真实移动端系统挂起策略、用户主观体验和人工验收。正式账户/Gist 不在本次测试范围。
 
-状态：`Awaiting User Acceptance`。未经用户明确同意，不合并 `main`。
+状态：`Release Ready`。用户已批准该 review 正式发布；发布后的正式页面仍需用户核对。
+
+## v3.22.0 发布前验证
+
+- 正式资源引用为 `styles.css?v=prod-pomodoro-20261018-1` 与 `app.js?v=prod-pomodoro-20261018-1`，更新记录和关于页显示 v3.22.0。
+- `python3 tools/check-prod-pomodoro.py` 通过：原有业务存储/IndexedDB、完整登录/Gist/加密、导入导出、正式命名空间/禁演示数据设置以及原初始化顺序均与 Prod 基线逐段一致；隔离浏览器验证正式模式、资源加载、原有数据保留、本机番茄记录与 Mock 隔离、暂停/刷新/完成；零外部请求或脚本错误。
+- `node --check app.js`、换行兼容的 `git diff --check`、14 组功能/12 项合并回归、5 种设备触控模拟、单文件交互预览和电脑尺寸切换全部通过。
+- 线上核验受当前环境代理限制：GitHub Pages 与 GitHub API 请求返回 403；不据此声称已确认部署或正式页面已更新。

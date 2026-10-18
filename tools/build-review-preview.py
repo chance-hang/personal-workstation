@@ -100,7 +100,10 @@ bootstrap = r"""
 """
 
 html = replace_once(html, '<title>个人工作台</title>', '<title>个人工作台 · 番茄时钟待验收</title>')
-html = replace_once(html, '<link rel="stylesheet" href="styles.css">', '<style>\n' + css + '\n.offline-review-notice{padding:10px 16px;text-align:center;background:#f8eee9;color:#824734;border-bottom:1px solid #ebd8d0;font-size:12px;line-height:1.8}.offline-review-notice span{display:block;font-size:11px}\n</style>')
+html, count = re.subn(r'<link rel="stylesheet" href="styles\.css(?:\?[^\"]*)?">',
+                     lambda _: '<style>\n' + css + '\n.offline-review-notice{padding:10px 16px;text-align:center;background:#f8eee9;color:#824734;border-bottom:1px solid #ebd8d0;font-size:12px;line-height:1.8}.offline-review-notice span{display:block;font-size:11px}\n</style>', html)
+if count != 1:
+    raise ValueError('Expected exactly one versioned or unversioned stylesheet entry.')
 html = replace_once(html, '<body>', '<body>\n<aside class="offline-review-notice"><b>番茄时钟 · 离线待验收</b> · 不连接正式账号或 Gist<span id="offlinePersistenceNote"></span></aside>')
 html, count = re.subn(r'<script src="app\.js\?[^\"]+"></script>',
                     lambda _: '<script>\n' + bootstrap + '\n' + js + '\n</script>', html)

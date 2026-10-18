@@ -2,9 +2,17 @@
 
 ## 当前状态
 
-Idle
+Release Ready — v3.22.0 番茄时钟与手机体验优化。
 
-当前没有待发布版本。
+用户已明确授权发布。发布源为 `review/pomodoro-clock` `97900de1c8ad224c2c2c3a41cbcf8bdfff1a75b0`；Prod 回滚基线为 `18f6fb57b520dccd6f2941487ec5e634b4b80701`。
+
+- 发布分支：`release/pomodoro-v3.22.0`；目标 `main`。
+- 允许范围：本 Source 的应用页面、番茄与手机交互、离线预览和验证工具及说明；发布额外更新 v3.22.0 展示、资源缓存参数、预览生成器和正式模式检查。
+- 禁止：改变正式登录、原存储命名空间/数据格式、Gist 协议、IndexedDB、导入导出、自动产生演示数据或同步 Mock 数据到正式库。
+- 必要验证：语法、源保护区一致性、正式模式无测试数据/外连、本地 Mock 功能与同步合并回归、单文件和手机交互验证。
+- 推荐提交信息：`release: publish pomodoro clock v3.22.0`。
+- 回滚备份：checkout 外的 `prod-rollback-18f6fb5.bundle`，保存原 Prod 历史；必要时通过新回滚提交恢复，不重写远端历史。
+- 验收结论与具体提交见 `docs/ACTIVE_TASK.md`、`docs/POMODORO_ACCEPTANCE.md`；推送后仍需正式页面人工验收。
 
 ## 仓库角色
 
