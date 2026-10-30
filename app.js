@@ -3303,12 +3303,19 @@ function renderFocusCard(){
   const e1=$('#focusExp'); if(e1)e1.textContent=money(exp);
   const e2=$('#focusTodo'); if(e2)e2.textContent=done+'/'+all;
   const s1=$('#focusExpSub'); if(s1){
-    s1.textContent=budget<=0?'未设置月预算':dynamic>0?`占动态日预算 ${Math.round(exp/dynamic*100)}%`:'月预算已用尽';
+    s1.textContent=budget<=0?'未设置月预算':dynamic>0?`占日预算 ${Math.round(exp/dynamic*100)}%`:'月预算已用尽';
+    const button=$('#focusBudgetToggle');if(button)button.setAttribute('aria-label',s1.textContent+'，'+(button.getAttribute('aria-expanded')==='true'?'收起日预算明细':'展开日预算明细'));
   }
   const d1=$('#focusDynamicBudget');if(d1)d1.textContent=`动态日预算 ${budget>0?money(dynamic):'—'}`;
   const d2=$('#focusFixedBudget');if(d2)d2.textContent=`固定日预算 ${budget>0?money(fixed):'—'}`;
   const s2=$('#focusTodoSub'); if(s2)s2.textContent=`今日待完成 ${stats.pending} 项 · 逾期 ${stats.overdue} 项`;
 }
+$('#focusBudgetToggle').onclick=()=>{
+  const button=$('#focusBudgetToggle'),expanded=button.getAttribute('aria-expanded')!=='true';
+  button.setAttribute('aria-expanded',String(expanded));
+  button.setAttribute('aria-label',$('#focusExpSub').textContent+'，'+(expanded?'收起日预算明细':'展开日预算明细'));
+  $('#focusBudgetDetails').hidden=!expanded;
+};
 
 /* ============ 账本 ============ */
 let curType='expense',curCat=null,curMonth=new Date();
@@ -5279,6 +5286,10 @@ async function cloudPull(opts={}){
     /* 同步成功后把 profile 的 salt 对齐到云端 blob 的 salt，保证后续推送往返一致 */
     if(blob.salt&&blob.salt!==p.salt){p.salt=blob.salt;saveProfiles();}
     const applied=applyPulledState(remote,replaceLocal);
+/* MOCK_PRESENTATION_START */
+    // Mock 日预算验收：新来源接收月预算设置；不改变正式模式的合并行为。
+    if(MOCK_SYNC&&Number.isFinite(remote.budget)&&remote.budget>=0&&S.budget!==remote.budget){S.budget=remote.budget;applied.changed=true;}
+/* MOCK_PRESENTATION_END */
     if(applied.replaced){
       /* 仅用户明确恢复操作可请求整库替换。 */
       if(Array.isArray(remote.modules))restoreModules(remote.modules);

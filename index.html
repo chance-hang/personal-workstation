@@ -12,7 +12,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#1a1a1a">
 <title>个人工作台</title>
-  <link rel="stylesheet" href="styles.css?v=prod-matters-20261030-1">
+  <link rel="stylesheet" href="styles.css?v=review-daily-budget-20261030-2">
 </head>
 <body>
 <div class="main-area" id="mainArea">
@@ -57,14 +57,19 @@
         <div class="f-item">
           <div class="f-lab"><span class="dot" style="background:var(--expense)"></span>今日支出</div>
           <div class="f-num ex" id="focusExp">¥0</div>
-          <div class="f-sub" id="focusExpSub">未设置月预算</div>
-          <div class="f-sub" id="focusDynamicBudget" title="剩余月预算 ÷ 含今天的剩余天数，不超过固定日预算；沿用账本的上月超支结转">动态日预算 —</div>
-          <div class="f-sub" id="focusFixedBudget" title="月预算 ÷ 当月天数">固定日预算 —</div>
+          <button type="button" class="focus-budget-toggle" id="focusBudgetToggle" aria-expanded="false" aria-controls="focusBudgetDetails" aria-label="展开日预算明细" title="今日支出占动态日预算；点击展开明细">
+            <span id="focusExpSub">未设置月预算</span>
+            <svg aria-hidden="true" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m5 7.5 5 5 5-5"/></svg>
+          </button>
         </div>
         <div class="f-item">
           <div class="f-lab"><span class="dot" style="background:var(--income)"></span>今日待办完成</div>
           <div class="f-num ok" id="focusTodo">0/0</div>
-          <div class="f-sub" id="focusTodoSub">暂无待办</div>
+          <div class="f-sub focus-sub-row" id="focusTodoSub">暂无待办</div>
+        </div>
+        <div class="focus-budget-details" id="focusBudgetDetails" hidden>
+          <div class="f-sub" id="focusDynamicBudget" title="剩余月预算 ÷ 含今天的剩余天数，不超过固定日预算；沿用账本的上月超支结转">动态日预算 —</div>
+          <div class="f-sub" id="focusFixedBudget" title="月预算 ÷ 当月天数">固定日预算 —</div>
         </div>
       </div>
       <div class="today-actions" aria-label="今日快捷操作">
@@ -591,6 +596,6 @@
 <div class="modal-mask" id="modalMask"><div class="modal" id="modalBox"></div></div>
 
 
-  <script src="app.js?v=review-daily-budget-20261030-1"></script>
+  <script src="app.js?v=review-daily-budget-20261030-2"></script>
 </body>
 </html>
