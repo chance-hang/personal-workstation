@@ -3291,28 +3291,29 @@ function renderTodayStat(){
 function renderFocusCard(){
   const t=todayStr();
   const exp=S.ledger.filter(x=>x.date===t&&x.type==='expense'&&catInBudget('expense',x.category)).reduce((s,x)=>s+x.amount,0);
+  const [year,month,day]=t.split('-').map(Number);
+  const days=new Date(year,month,0).getDate(),remainingDays=days-day+1;
+  const budget=Number(S.budget)||0,fixed=budget>0?budget/days:0;
+  const ms=t.slice(0,7);
+  // 与账本月预算保持一致：扣除上月超支结转，整月已记支出含今天。
+  const carry=Math.max(0,budgetExpOf(prevMonthMs(ms))-budget);
+  const remaining=Math.max(0,Math.round((budget-carry-budgetExpOf(ms))*100)/100);
+  const dynamic=Math.min(fixed,remaining/remainingDays);
   const stats=matterTodayStats(t),done=stats.done,all=done+stats.pending;
   const e1=$('#focusExp'); if(e1)e1.textContent=money(exp);
   const e2=$('#focusTodo'); if(e2)e2.textContent=done+'/'+all;
   const s1=$('#focusExpSub'); if(s1){
-    if(exp>0){
-      if((S.budget||0)>0){
-        const pct=Math.min(Math.round(exp/(S.budget||1)*100),999);
-        s1.textContent=`占月预算 ${pct}%`;
-      }else{
-        s1.textContent='今日已支出';
-      }
-    }else{
-      s1.textContent='今日暂无支出';
-    }
+    s1.textContent=budget<=0?'未设置月预算':dynamic>0?`占动态日预算 ${Math.round(exp/dynamic*100)}%`:'月预算已用尽';
   }
+  const d1=$('#focusDynamicBudget');if(d1)d1.textContent=`动态日预算 ${budget>0?money(dynamic):'—'}`;
+  const d2=$('#focusFixedBudget');if(d2)d2.textContent=`固定日预算 ${budget>0?money(fixed):'—'}`;
   const s2=$('#focusTodoSub'); if(s2)s2.textContent=`今日待完成 ${stats.pending} 项 · 逾期 ${stats.overdue} 项`;
 }
 
 /* ============ 账本 ============ */
 let curType='expense',curCat=null,curMonth=new Date();
 function renderMoney(){
-  renderCats();renderFlow();renderMonthStat();renderCatChart();renderTodayStat();renderNoteQuickRow();renderFundManager();renderAssets();
+  renderCats();renderFlow();renderMonthStat();renderCatChart();renderTodayStat();renderNoteQuickRow();renderFundManager();renderAssets();renderFocusCard();
 }
 /* ============ 资金管理（v3.20.23 demo） ============ */
 const FM_DEFAULT_DIRS=[
@@ -3567,7 +3568,7 @@ function openCatManager(type){
   $('#modalBox').classList.add('wide');
   if(isExp){
     $$('#budgetCatList .budgetSw').forEach(sw=>{
-      sw.onchange=()=>{setCatBudget('expense',sw.dataset.cat,sw.checked);renderCats();renderMonthStat();renderTodayStat();renderPies(flowFiltered())};
+      sw.onchange=()=>{setCatBudget('expense',sw.dataset.cat,sw.checked);renderCats();renderMonthStat();renderTodayStat();renderFocusCard();renderPies(flowFiltered())};
     });
     $$('#budgetCatList .del-cat').forEach(x=>x.onclick=()=>deleteCustomCat('expense',x.dataset.del));
   }
@@ -4612,7 +4613,7 @@ $('#budgetBtn').onclick=()=>{
     <div class="field"><span class="lab" style="width:40px">¥</span><input id="bIn" type="number" inputmode="decimal" class="input-styled" value="${S.budget||''}" placeholder="如 3000"></div>
     <p class="muted" style="margin:0 0 10px">设为 0 表示不使用预算</p>
     <div class="btns"><button class="cancel" onclick="confirmClose(()=>{$('#bSave').click()})">关闭</button><button class="ok" id="bSave">保存</button></div>`,{noMaskClose:true});
-  $('#bSave').onclick=()=>{S.budget=Math.max(0,parseFloat($('#bIn').value)||0);closeModal();persist();renderMonthStat();toast('预算已更新')};
+  $('#bSave').onclick=()=>{S.budget=Math.max(0,parseFloat($('#bIn').value)||0);closeModal();persist();renderMonthStat();renderFocusCard();toast('预算已更新')};
 };
 $('#clearBtn').onclick=()=>{
   const syncOn=syncActive();
