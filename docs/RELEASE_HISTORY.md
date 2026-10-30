@@ -2,7 +2,11 @@
 
 ## 2026-10-30 — 事项整合与统一控件 UI（v3.23.0）
 
-状态：用户已验收当前 review 并明确授权发布；发布执行与线上构建状态见 `docs/ACTIVE_TASK.md` 当前节。
+状态：已按用户授权推送正式 main，Pages 部署和静态资源检查成功；待正式网页业务验收。
+
+- 发布内容提交：`127bb5b29050b72462a6d7a8266d3c33cdf41fd1`；Pages 构建 `41023103225` 为 `completed / success`。
+- 正式首页与 JS/CSS 均 HTTP 200，核对 v3.23.0、`prod-matters-20261030-1` 及统一勾选样式令牌。
+- 发布过程中本地索引写入失败；逐项核对 24 个文件和目标索引树后有条件完成原基线到发布提交的快进，未清理、重置或重写历史。
 
 - Source：`review/unified-matters` `f3021db50014024417394a8f2917a248e59199bc`，`Release Ready`。
 - 发布分支：`release/matters-v3.23.0`；目标 `main`；回滚基线 `8c65431be7e243d833ff0e51b9b8c8e768c43e9a`。

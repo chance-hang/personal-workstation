@@ -2,6 +2,10 @@
 
 ## 2026-10-30 当前发布清单：事项整合 v3.23.0
 
+- 执行结果：已推送正式 `main`；发布内容提交 `127bb5b29050b72462a6d7a8266d3c33cdf41fd1`。
+- Pages 构建 `41023103225` 成功；正式 HTML/JS/CSS 均 HTTP 200，版本 v3.23.0 与正式缓存参数已核对。
+- 状态：`Awaiting User Acceptance`（正式网页业务验收），不再等待 review 发布批准。
+
 - 用户本轮明确同意发布；Source `review/unified-matters` `f3021db50014024417394a8f2917a248e59199bc` 为 `Release Ready`。
 - 基线/回滚参照：`8c65431be7e243d833ff0e51b9b8c8e768c43e9a`。
 - 发布分支：`release/matters-v3.23.0`；目标 `main`；只允许已接受的事项整合和 UI/Mock 标识修正。
