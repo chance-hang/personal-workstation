@@ -4168,7 +4168,7 @@ function matterRow({kind,record:x}){
   const status=kind==='todo'?(x.done?'已完成':matterIsOverdue(x)?'已逾期':todoDue(x)?'待完成':'未定时间'):(x.done?'已归档':'备忘');
   const stamp=kind==='todo'?(x.done?`完成：${x.completedAt?matterTimeLabel(x.completedAt):'时间未记录'}`:`计划：${todoDue(x).replace('T',' ')||'暂未安排'}`):`记录：${matterTimeLabel(x.createdAt||x.updatedAt)}`;
   return `<article class="matter-row ${x.done?'is-done':''}" data-kind="${kind}" data-id="${esc(x.id)}">
-    <button type="button" class="matter-check" data-action="toggle" aria-label="${x.done?'重新打开':kind==='todo'?'完成待办':'归档备忘'}" aria-pressed="${!!x.done}">${x.done?'✓':kind==='note'?'≡':''}</button>
+    <button type="button" class="matter-check" data-action="toggle" aria-label="${x.done?'重新打开':kind==='todo'?'完成待办':'归档备忘'}" aria-pressed="${!!x.done}"><span class="matter-check-mark" aria-hidden="true">${x.done?'<svg viewBox="0 0 16 16" fill="none"><path d="m4 8 2.5 2.5L12 5"/></svg>':kind==='note'?'<svg viewBox="0 0 16 16" fill="none"><path d="M5 5.5h6M5 8h6M5 10.5h4"/></svg>':''}</span></button>
     <div class="matter-row-body"><div class="matter-row-title"><b>${esc(title)}</b><span class="matter-badge ${kind==='todo'&&matterIsOverdue(x)?'overdue':''}">${status}</span></div>
     ${body?`<p class="matter-excerpt">${esc(body)}</p>`:''}<div class="matter-row-meta"><span>${esc(stamp)}</span>${source?'<span>来自备忘</span>':''}${linked?'<span>已关联待办</span>':''}${matterReferences(x).length?`<span>交付物 ${matterReferences(x).length}</span>`:''}</div>
     ${x.completionNote?`<p class="matter-result-note">结果：${esc(x.completionNote)}</p>`:''}
@@ -4303,7 +4303,7 @@ $('#matterViews').onclick=e=>{const b=e.target.closest('[data-view]');if(b){matt
 $('#matterSearch').oninput=()=>{matterLimit=40;renderNotes()};
 ['matterType','matterDateBy','matterFrom','matterTo'].forEach(id=>$('#'+id).onchange=()=>{matterLimit=40;renderNotes()});
 $('#matterReset').onclick=()=>{$('#matterSearch').value='';$('#matterType').value='all';$('#matterFrom').value='';$('#matterTo').value='';renderNotes()};
-$('#matterCaptureKind').onchange=()=>{const todo=$('#matterCaptureKind').value==='todo';$('#matterCaptureDateWrap').hidden=!todo;$('#matterCaptureTimeWrap').hidden=!todo;$('#noteAdd').textContent=todo?'添加待办':'保存备忘'};
+$('#matterCaptureKind').onchange=()=>{const todo=$('#matterCaptureKind').value==='todo';$('#matterCapture').classList.toggle('is-todo',todo);$('#matterCaptureDateWrap').hidden=!todo;$('#matterCaptureTimeWrap').hidden=!todo;$('#noteAdd').textContent=todo?'添加待办':'保存备忘'};
 $('#todayOpenMatters').onclick=()=>openMatters('pending');
 $('#todoDueDate').value=todayStr();$('#todoNoDue').onclick=()=>{$('#todoDueDate').value='';$('#todoDueTime').value=''};
 setInterval(()=>{

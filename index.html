@@ -12,7 +12,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#1a1a1a">
 <title>个人工作台</title>
-  <link rel="stylesheet" href="styles.css?v=review-matters-20261030-2">
+  <link rel="stylesheet" href="styles.css?v=review-matters-20261030-3">
 </head>
 <body>
 <div class="main-area" id="mainArea">
@@ -161,7 +161,7 @@
             <input id="todoIn" aria-label="待办内容" placeholder="记下需要做的事…" maxlength="200">
             <button id="todoAdd"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>添加</button>
           </div>
-          <div class="matter-quick-date"><label>计划完成 <input type="date" id="todoDueDate"></label><label>时间（选填）<input type="time" id="todoDueTime"></label><button type="button" id="todoNoDue">暂不安排</button></div>
+          <div class="matter-quick-date"><label>计划完成<input type="date" id="todoDueDate"></label><label>时间（选填）<input type="time" id="todoDueTime"></label><button type="button" id="todoNoDue" title="清除计划日期与时间">清除</button></div>
           <div class="todo-prog-row"><span id="todoProgTxt">0 / 0</span><span id="todoPct">0%</span></div>
           <div class="todo-prog"><i id="todoBar" style="width:0"></i></div>
           <div id="todoList"></div>
@@ -460,12 +460,12 @@
       <div class="sec" data-module="notes">
         <div class="page-title">事项 · 待办与备忘</div>
         <div class="card matters-workbench">
-          <div class="matters-heading"><div><h2>把想到的记下，把要做的安排好</h2><p>随手记，随时做，完成后留得下结果。</p></div><span id="noteCount" aria-live="polite"></span></div>
+          <div class="matters-heading"><div><h2>记录与安排</h2><p>随手记录，安排时间，追溯结果。</p></div><span id="noteCount" aria-live="polite"></span></div>
           <form id="matterCapture" class="matter-capture">
-            <label for="memoIn" class="matter-label">记录一件事</label>
+            <label for="memoIn" class="matter-label">随手记录</label>
             <textarea id="memoIn" placeholder="写下想法、资料，或需要完成的事情…" maxlength="10000" rows="3"></textarea>
             <div class="matter-capture-controls"><label>类型<select id="matterCaptureKind"><option value="note">备忘 · 先记下来</option><option value="todo">待办 · 需要完成</option></select></label><label id="matterCaptureDateWrap" hidden>计划完成<input id="matterCaptureDate" type="date"></label><label id="matterCaptureTimeWrap" hidden>时间（选填）<input id="matterCaptureTime" type="time"></label><button id="noteAdd" type="submit" class="matter-primary">保存备忘</button></div>
-            <p class="matter-hint">Ctrl / ⌘ + Enter 保存。备忘可随时关联待办；计划时间用于排序与逾期标记。</p>
+            <p class="matter-hint"><span class="matter-keyboard-hint">Ctrl / ⌘ + Enter 保存 · </span>备忘可关联待办，完成后保留结果与交付物。</p>
           </form>
           <div class="matter-tabs" id="matterViews" role="group" aria-label="事项视图"><button type="button" data-view="today">今日</button><button type="button" data-view="pending" class="on" aria-pressed="true">未完成</button><button type="button" data-view="notes">备忘</button><button type="button" data-view="completed">已完成</button><button type="button" data-view="all">全部</button></div>
           <label class="matter-search" for="matterSearch"><span>搜索</span><input id="matterSearch" type="search" placeholder="事项、正文、完成说明或交付物"></label>
@@ -589,6 +589,6 @@
 <div class="modal-mask" id="modalMask"><div class="modal" id="modalBox"></div></div>
 
 
-  <script src="app.js?v=review-matters-20261030-2"></script>
+  <script src="app.js?v=review-matters-20261030-3"></script>
 </body>
 </html>
