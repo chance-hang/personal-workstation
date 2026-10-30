@@ -3102,8 +3102,11 @@ function renderTodos(){
   $('#todoProgTxt').textContent=`今日完成 ${stats.done} / ${total} · 逾期 ${stats.overdue} 项`;
   $('#todoPct').textContent=total?Math.round(stats.done/total*100)+'%':'0%';
   $('#todoBar').style.width=(total?stats.done/total*100:0)+'%';
-  const list=matterRecords().filter(x=>x.kind==='todo'&&matterInToday(x.record,t)).sort(matterSort);
-  $('#todoList').innerHTML=list.length?matterRowsHtml(list.slice(0,8),true):'<div class="matter-empty"><b>今天暂无安排</b><p>随时记下待办，也可以到“全部事项”查看未定时间的记录。</p></div>';
+  const order=(a,b)=>Number(!b.record.done&&todoDue(b.record).slice(0,10)===t)-Number(!a.record.done&&todoDue(a.record).slice(0,10)===t)||matterSort(a,b);
+  const list=matterRecords().filter(x=>x.kind==='todo'&&matterInToday(x.record,t)).sort(order);
+  const preview=list.slice(0,8),revealed=list.find(x=>x.record.id===matterHomeRevealId);
+  if(revealed&&!preview.includes(revealed)){preview[preview.length-1]=revealed;preview.sort(order)}
+  $('#todoList').innerHTML=list.length?matterRowsHtml(preview,true):'<div class="matter-empty"><b>今天暂无安排</b><p>随时记下待办，也可以到“全部事项”查看未定时间的记录。</p></div>';
   if(list.length>8)$('#todoList').insertAdjacentHTML('beforeend',`<button class="matter-more" type="button" onclick="openMatters('today')">查看全部 ${list.length} 项</button>`);
 }
 $('#todoAdd').onclick=()=>addTodo();
@@ -4184,7 +4187,7 @@ function matterRowsHtml(list,grouped=false){
   });
   return [...groups].map(([label,items])=>`<h3 class="matter-group-heading">${label}<span>${items.length} 项</span></h3>${items.map(matterRow).join('')}`).join('');
 }
-let matterView='pending',matterLimit=40;
+let matterView='pending',matterLimit=40,matterHomeRevealId='';
 function openMatters(view='pending'){
   matterView=view;matterLimit=40;
   $('#matterSearch').value='';$('#matterType').value='all';$('#matterFrom').value='';$('#matterTo').value='';
@@ -4239,22 +4242,34 @@ function matterDelete(kind,id){
 function deleteNote(id){matterDelete('note',id)}
 function matterConvert(id){
   const n=liveNotes().find(n=>n.id===id);if(!n)return;
-  let task=liveTodos().find(t=>t.sourceNoteId===id);
-  if(!task){
-    const taskId='note-task:'+id,old=S.todos.find(t=>t.id===taskId);
-    if(old){old.deletedAt=null;matterSetDone(old,false);matterTouch(old);task=old;}
-    else {task=newMatterTodo(n.title||noteTitle(n.content),'',{id:taskId,details:n.content||'',sourceNoteId:id});S.todos.push(task);}
-    persist();refreshMatters();
-  };
-  openMatter('todo',task.id);
+  const existing=liveTodos().find(t=>t.sourceNoteId===id);
+  if(existing){openMatter('todo',existing.id,{reveal:true});return}
+  const taskId='note-task:'+id,old=S.todos.find(t=>t.id===taskId);
+  let draft;
+  if(old?.deletedAt&&old.sourceNoteId===id){draft=structuredClone(old);draft.deletedAt=null;draft.dueAt=todayStr();matterSetDone(draft,false)}
+  else draft=newMatterTodo(n.title||noteTitle(n.content),todayStr(),{id:old?taskId+'-'+uid():taskId,details:n.content||'',sourceNoteId:id});
+  // 先编辑草稿，确认后才写入；取消不会新增或恢复待办。
+  openMatter('todo',draft.id,{draft,reveal:true});
 }
 function editNote(id){openMatter('note',id)}
-function openMatter(kind,id){
-  const x=(kind==='todo'?liveTodos():liveNotes()).find(x=>x.id===id);if(!x)return;
+function revealArrangedMatter(task){
+  openMatters(task.done?'completed':'pending');
+  const list=liveTodos().filter(x=>!!x.done===!!task.done).map(record=>({kind:'todo',record})).sort(matterSort);
+  const index=list.findIndex(x=>x.record.id===task.id);
+  matterLimit=Math.max(40,Math.ceil((index+1)/40)*40);matterHomeRevealId=task.id;
+  refreshMatters();
+  const selector=`#noteList .matter-row[data-id="${CSS.escape(task.id)}"]`;
+  goTab('notes',{scrollTo:selector});
+  setTimeout(()=>{const row=$(selector);if(row){row.tabIndex=-1;row.focus({preventScroll:true})}},450);
+  const due=todoDue(task).slice(0,10);
+  toast(task.done?'已保存，可在已完成列表查看':!due?'已加入未完成列表（未设计划日期）':due===todayStr()?'已安排到今天，首页待办已更新':`已安排到 ${due}，可在未完成列表查看`);
+}
+function openMatter(kind,id,options={}){
+  const x=options.draft||(kind==='todo'?liveTodos():liveNotes()).find(x=>x.id===id);if(!x)return;
   const todo=kind==='todo',source=todo?matterSource(x):null,due=todo?todoDue(x):'';
   const linkable=todo?liveNotes().filter(n=>n.id===x.sourceNoteId||!liveTodos().some(t=>t.id!==id&&t.sourceNoteId===n.id)):[];
   const linked=!todo?liveTodos().find(t=>t.sourceNoteId===id):null;
-  modal(`<h4>${todo?'待办':'备忘'}详情<button type="button" class="modal-close" id="matterClose" aria-label="关闭">×</button></h4>
+  modal(`<h4>${options.draft?'安排为待办':todo?'待办详情':'备忘详情'}<button type="button" class="modal-close" id="matterClose" aria-label="关闭">×</button></h4>
     <form id="matterEditForm"><div class="matter-detail-meta">记录：${esc(matterTimeLabel(x.createdAt||(!todo?x.updatedAt:'')))}${todo&&!x.createdAt&&x.date?` · 原记录日期 ${esc(x.date)}`:''}<br>${todo?`实际完成：${x.done?(x.completedAt?esc(matterTimeLabel(x.completedAt)):'完成时间未记录'):'尚未完成'}`:'备忘可以归档，也可以关联为待办。'}</div>
     ${todo?`<label class="matter-field">事项名称<input id="matterTitle" required maxlength="200" value="${esc(x.text||'')}"></label>`:''}
     <label class="matter-field">${todo?'事项说明':'备忘正文'}<textarea id="matterBody" rows="4" maxlength="10000" ${todo?'':'required'}>${esc(todo?x.details||'':x.content||x.title||'')}</textarea></label>
@@ -4267,7 +4282,7 @@ function openMatter(kind,id){
     <p class="matter-hint">这里只保存引用；本机路径需在原电脑打开，文件本身不会上传。</p>
     <div class="matter-reference-list">${matterReferences(x).map(v=>`<div>${matterReferenceHtml(v)}</div>`).join('')}</div>
     ${todo&&(x.completionEvents||[]).length?`<details class="matter-source"><summary>完成与重开记录</summary>${x.completionEvents.map(e=>`<p>${esc(e.action)} · ${esc(matterTimeLabel(e.at))}</p>`).join('')}</details>`:''}
-    <p id="matterEditError" class="matter-error" role="alert"></p><div class="btns"><button type="button" class="cancel" id="matterCancel">取消</button><button type="submit" class="ok" id="matterSave">保存</button></div></form>
+    <p id="matterEditError" class="matter-error" role="alert"></p><div class="btns"><button type="button" class="cancel" id="matterCancel">取消</button><button type="submit" class="ok" id="matterSave">${options.draft?'确认安排':'保存'}</button></div></form>
     ${!todo?`<button type="button" class="matter-more" id="matterConvert">${linked?'查看关联待办':'安排为待办'}</button>`:''}`,{noMaskClose:true});
   $('#modalBox').classList.add('matter-dialog');
   const form=$('#matterEditForm');
@@ -4284,10 +4299,16 @@ function openMatter(kind,id){
     const date=todo?$('#matterDueDate').value:'',time=todo?$('#matterDueTime').value:'';
     if(!title||!todo&&!body){$('#matterEditError').textContent='请填写事项名称或备忘正文。';return}
     if(time&&!date){$('#matterEditError').textContent='请先选择计划日期，或清除时间。';return}
+    const records=todo?S.todos:S.notes,index=records.findIndex(r=>r.id===id),current=records[index];
+    if(!options.draft&&(!current||current.deletedAt)){$('#matterEditError').textContent='这条事项已被移除，请关闭后重新查看。';return}
     if(todo){x.text=title;x.details=body;x.dueAt=date+(date&&time?'T'+time:'');x.sourceNoteId=$('#matterLinkedNote').value;matterSetDone(x,$('#matterStatus').value==='done');}
     else{x.title=title;x.content=body;x.done=$('#matterStatus').value==='done';}
     x.completionNote=$('#matterCompletionNote').value.trim();x.deliverables=$('#matterDeliverables').value.split('\n').map(s=>s.trim()).filter(Boolean);
-    matterTouch(x);persist();closeModal();refreshMatters();toast('事项已保存');
+    // 同步合并可能已替换数组中的对象，按 ID 写回当前数组，避免保存到旧引用。
+    if(current&&(noteUpdatedAt(current.updatedAt)||0)>(noteUpdatedAt(x.updatedAt)||0))x.updatedAt=current.updatedAt;
+    matterTouch(x);if(index<0)records.push(x);else records[index]=x;
+    persist();closeModal();
+    if(todo&&options.reveal)revealArrangedMatter(x);else{refreshMatters();toast('事项已保存')}
   };
 }
 function matterListAction(e){
