@@ -1,5 +1,16 @@
 # RELEASE
 
+## 2026-10-30 事项整合 review（当前）
+
+- 状态：`Awaiting User Acceptance`，非 `Release Ready`，尚未发布。
+- Source 分支：`review/unified-matters`；基线/回滚参照：`8c65431be7e243d833ff0e51b9b8c8e768c43e9a`。
+- 允许范围：待办与备忘整合、必要统计/历史/日报/热力/番茄选项联动、事项更新时间合并、review 工具和验收说明；详见 `docs/ACTIVE_TASK.md` 当前节。
+- 受保护的登录、存储命名空间、IndexedDB、Gist 路径及加密、导入导出外层格式和云初始化顺序保持。
+- 开发与自检不等于发布批准；用户尚未人工验收，本次不得合并或推送 `main`。
+- 自检与人工清单：`docs/MATTERS_ACCEPTANCE.md`。
+
+以下 Idle 和旧版发布流程仅为原有记录；当前以本节为准。
+
 ## 当前状态
 
 Awaiting Prod Acceptance — v3.22.0 已推送正式 `main`。

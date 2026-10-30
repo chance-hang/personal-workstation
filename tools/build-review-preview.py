@@ -9,14 +9,18 @@ ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--output', required=True, type=Path)
 parser.add_argument('--device-preview', action='store_true', help='Wrap the preview in an interactive phone/tablet size selector.')
+parser.add_argument('--label', default='番茄时钟', help='Human-readable preview title; application labels are unchanged.')
+parser.add_argument('--namespace', default='review_pomodoro_offline_', help='Isolated storage prefix; must start with review_ and end with _.')
 args = parser.parse_args()
+if not re.fullmatch(r'review_[A-Za-z0-9_]+_', args.namespace):
+    parser.error('Use a distinct review_..._ storage prefix, never a production namespace.')
 output = args.output.resolve()
 if output.is_relative_to(ROOT):
     parser.error('Write the generated preview outside the repository checkout.')
 
-html = (ROOT / 'index.html').read_text()
-css = (ROOT / 'styles.css').read_text()
-js = (ROOT / 'app.js').read_text()
+html = (ROOT / 'index.html').read_text(encoding='utf-8')
+css = (ROOT / 'styles.css').read_text(encoding='utf-8')
+js = (ROOT / 'app.js').read_text(encoding='utf-8')
 
 
 def replace_once(text, old, new):
@@ -99,12 +103,12 @@ bootstrap = r"""
 })();
 """
 
-html = replace_once(html, '<title>个人工作台</title>', '<title>个人工作台 · 番茄时钟待验收</title>')
+html = replace_once(html, '<title>个人工作台</title>', '<title>个人工作台 · __PREVIEW_LABEL__待验收</title>')
 html, count = re.subn(r'<link rel="stylesheet" href="styles\.css(?:\?[^\"]*)?">',
                      lambda _: '<style>\n' + css + '\n.offline-review-notice{padding:10px 16px;text-align:center;background:#f8eee9;color:#824734;border-bottom:1px solid #ebd8d0;font-size:12px;line-height:1.8}.offline-review-notice span{display:block;font-size:11px}\n</style>', html)
 if count != 1:
     raise ValueError('Expected exactly one versioned or unversioned stylesheet entry.')
-html = replace_once(html, '<body>', '<body>\n<aside class="offline-review-notice"><b>番茄时钟 · 离线待验收</b> · 不连接正式账号或 Gist<span id="offlinePersistenceNote"></span></aside>')
+html = replace_once(html, '<body>', '<body>\n<aside class="offline-review-notice"><b>__PREVIEW_LABEL__ · 离线待验收</b> · 不连接正式账号或 Gist<span id="offlinePersistenceNote"></span></aside>')
 html, count = re.subn(r'<script src="app\.js\?[^\"]+"></script>',
                     lambda _: '<script>\n' + bootstrap + '\n' + js + '\n</script>', html)
 if count != 1:
@@ -117,7 +121,7 @@ if args.device_preview:
     embedded = escape(html, quote=True)
     html = '''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>番茄时钟 · 手机体验预览</title><style>
+<title>__PREVIEW_LABEL__ · 手机体验预览</title><style>
 *{box-sizing:border-box}body{margin:0;background:#efefec;color:#1a1a1a;font-family:system-ui,"PingFang SC",sans-serif}
 header{padding:14px 20px;background:white;border-bottom:1px solid #ddd;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 h1{font-size:17px;margin:0}p{font-size:12px;color:#666;margin:4px 0 0}.devices{display:flex;gap:6px;flex-wrap:wrap}
@@ -125,12 +129,12 @@ button{min-height:44px;min-width:60px;padding:8px 12px;border:1px solid #ddd;bor
 button[aria-pressed="true"]{background:#a95f4b;color:white;border-color:#a95f4b}button:focus-visible{outline:2px solid #a95f4b;outline-offset:2px}
 .stage{padding:18px 12px;display:flex;justify-content:center;overflow:auto;align-items:flex-start}
 iframe{box-sizing:content-box;width:390px;height:740px;max-width:calc(100% - 2px);flex:none;background:white;border:1px solid #d5d5d0;border-radius:18px;box-shadow:0 8px 28px #0001}
-</style></head><body><header><div><h1>番茄时钟 · 手机体验预览</h1><p>可在电脑切换屏幕宽度、直接操作。此处仅预览布局，尚未经真机验收。</p></div>
+</style></head><body><header><div><h1>__PREVIEW_LABEL__ · 手机体验预览</h1><p>可在电脑切换屏幕宽度、直接操作。此处仅预览布局，尚未经真机验收。</p></div>
 <div class="devices" role="group" aria-label="预览设备尺寸">
 <button data-width="390" data-height="740" aria-pressed="true">手机</button><button data-width="320" data-height="568" aria-pressed="false">小屏</button>
 <button data-width="844" data-height="390" aria-pressed="false">横屏</button><button data-width="768" data-height="1024" aria-pressed="false">平板</button>
 <button data-width="full" data-height="900" aria-pressed="false">桌面</button></div></header>
-<main class="stage"><iframe id="reviewDevice" title="可交互的番茄时钟待验收页面" srcdoc="''' + embedded + '''"></iframe></main>
+<main class="stage"><iframe id="reviewDevice" title="可交互的__PREVIEW_LABEL__待验收页面" srcdoc="''' + embedded + '''"></iframe></main>
 <script>
 document.querySelectorAll('[data-width]').forEach(button=>button.onclick=()=>{
   const frame=document.getElementById('reviewDevice');
@@ -139,6 +143,8 @@ document.querySelectorAll('[data-width]').forEach(button=>button.onclick=()=>{
   document.querySelectorAll('[data-width]').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));
 });
 </script></body></html>'''
+html = html.replace('__PREVIEW_LABEL__', escape(args.label, quote=True))
+html = html.replace('review_pomodoro_offline_', args.namespace)
 output.parent.mkdir(parents=True, exist_ok=True)
-output.write_text(html)
+output.write_text(html, encoding='utf-8')
 print(f'Built offline review preview: {output} ({output.stat().st_size} bytes)')

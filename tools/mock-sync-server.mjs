@@ -30,6 +30,12 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const pathname = url.pathname;
 
+  if (pathname === '/phone') {
+    res.writeHead(302, { Location: '/?mockSync=1', 'Cache-Control': 'no-store' });
+    res.end();
+    return;
+  }
+
   if (pathname.startsWith('/__mock_gists')) {
     if (req.method === 'GET' && pathname === `/__mock_gists/${gistId}`) {
       return send(res, 200, {
@@ -58,6 +64,10 @@ const server = createServer(async (req, res) => {
 
   let filePath = decodeURIComponent(pathname);
   if (filePath === '/') filePath = '/index.html';
+  // LAN acceptance serves application assets only, never repository metadata.
+  if (!['/index.html', '/app.js', '/styles.css'].includes(filePath)) {
+    return send(res, 404, { message: 'Not Found' });
+  }
   const file = join(root, filePath);
   if (!file.startsWith(root) || !existsSync(file) || !statSync(file).isFile()) {
     return send(res, 404, { message: 'Not Found' });
