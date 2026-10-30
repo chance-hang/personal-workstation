@@ -4724,6 +4724,47 @@ const PROFILES_KEY='lifeworkbench_sync_profiles';
 const CURRENT_PROFILE_KEY='lifeworkbench_sync_current';
 /* 本地验收隔离：只有显式带 ?mockSync=1 才切换到本机 Mock 云端，默认仍使用 Prod Gist。 */
 const MOCK_SYNC=new URLSearchParams(location.search).get('mockSync')==='1';
+/* MOCK_PRESENTATION_START */
+let mockSyncState='off';
+function setMockSyncStatus(state){
+  mockSyncState=state;
+  const map={off:['本地模拟未连接','off'],sync:['本地模拟同步中','sync'],ok:['本地模拟同步完成','on'],err:['本地模拟同步失败','err']};
+  const [label,cls]=map[state]||map.off;
+  ['syncStatus','syncStatus2'].forEach(id=>{const el=$('#'+id);if(el){el.textContent=label;el.className='sync-dot '+cls;el.title='仅本地模拟服务，未连接正式 GitHub Gist'}});
+}
+async function syncMockNow(){
+  if(syncBusy){toast('本地模拟同步进行中');return}
+  try{
+    const pushed=await cloudPush(),pulled=await cloudPull();
+    toast(pushed===false||pulled===false?'本地模拟同步失败，请检查本地服务':'本地模拟同步完成，未连接正式云端');
+  }catch(e){setMockSyncStatus('err');toast('本地模拟服务暂不可用，请检查本地服务')}
+}
+function mockEndpointLabel(){return window.__reviewStorage?'本页面内置的离线模拟器':new URL('/__mock_gists/local-mock',location.href).href}
+function openMockSyncInfo(){
+  modal(`<h4>本地模拟验收<span class="modal-close" onclick="closeModal()">×</span></h4>
+    <div class="privacy-box"><b>待验收 · 未连接正式云端</b><br>这里只测试本地模拟数据，不使用正式账号、Token 或 Passcode。</div>
+    <div class="sync-row"><span>模拟状态</span><span id="syncStatus2" class="sync-dot"></span></div>
+    <p class="mock-endpoint">目标：<code>${esc(mockEndpointLabel())}</code></p>
+    <p class="muted">模拟服务不执行正式加密。服务关闭后，服务中的临时数据会清空；浏览器已保存的本地记录仍保留。</p>
+    <div class="btns"><button class="cancel" onclick="closeModal()">关闭</button><button class="ok" id="mockSyncNow">立即模拟同步</button></div>`,{noMaskClose:true});
+  setMockSyncStatus(mockSyncState);$('#mockSyncNow').onclick=syncMockNow;
+}
+function renderMockSyncPresentation(){
+  const notice=$('#reviewEnvNotice');if(notice)notice.hidden=false;
+  const section=$('[data-module="cloudSync"]');
+  if(section){
+    section.querySelector('.page-title').textContent='本地模拟同步 · 待验收';
+    section.querySelector('.privacy-box').innerHTML='<b>本地模拟验收说明</b><br>· 仅连接当前电脑的模拟服务，不连接正式 GitHub Gist。<br>· 不使用正式账户、Token 或 Passcode；模拟数据不执行正式加密。<br>· “本地模拟同步完成”只说明本地模拟服务通信完成，不代表发布或正式云端备份。<br>· 关闭服务会清空服务中的临时数据；浏览器已保存的本地记录仍保留。';
+    const settings=$('#syncBtn');settings.textContent='模拟环境说明';settings.title='本地模拟环境，不提供正式账户配置';settings.onclick=openMockSyncInfo;
+    settings.closest('.set-row').querySelector('.lab').textContent='验收环境';
+    const now=$('#syncNowBtnDirect');now.textContent='立即模拟同步';now.onclick=syncMockNow;
+    now.closest('.set-row').querySelector('.lab').textContent='本地模拟操作';
+    const history=$('#syncHistoryBtnDirect');history.closest('.set-row').hidden=true;history.onclick=()=>toast('本地模拟不提供正式历史版本恢复');
+  }
+  const side=SUBMODULES.me.find(x=>x.id==='cloudSync');if(side)side.label='本地模拟同步';
+  setMockSyncStatus(mockSyncState);requestAnimationFrame(syncStickyOffsets);
+}
+/* MOCK_PRESENTATION_END */
 const GITHUB_API=MOCK_SYNC?'/__mock_gists':'https://api.github.com/gists';
 const GH_HEADERS=(token)=>({'Authorization':'token '+token,'Accept':'application/vnd.github+json','Content-Type':'application/json'});
 let syncProfiles=[];        /* 账户列表 [{id,name,binId,masterKey,salt}]，不含 passcode */
@@ -4893,6 +4934,9 @@ async function decryptState(blob,passcode){
 }
 
 function setSyncStatus(state){
+/* MOCK_PRESENTATION_START */
+  if(MOCK_SYNC){setMockSyncStatus(state);return;}
+/* MOCK_PRESENTATION_END */
   const el=$('#syncStatus');if(!el)return;
   const map={off:['未开启','off'],sync:['同步中','sync'],ok:['已同步','on'],err:['同步失败','err']};
   const [t,c]=map[state]||map.off;
@@ -4932,6 +4976,9 @@ function markSyncAuthRequired(){
 }
 
 function renderSyncBtn(){
+/* MOCK_PRESENTATION_START */
+  if(MOCK_SYNC){renderMockSyncPresentation();return;}
+/* MOCK_PRESENTATION_END */
   const btn=$('#syncBtn');
   if(!btn)return;
   const p=currentProfile();
@@ -5547,10 +5594,16 @@ function promptLogin(profile){
 
 /* 账户管理主界面 */
 function openSyncSetup(){
+/* MOCK_PRESENTATION_START */
+  if(MOCK_SYNC){openMockSyncInfo();return;}
+/* MOCK_PRESENTATION_END */
   if(TEST_BUILD){toast('测试版不连接云同步（独立库，数据不互通）');return;}
   renderAccountManager();
 }
 function renderAccountManager(){
+/* MOCK_PRESENTATION_START */
+  if(MOCK_SYNC){openMockSyncInfo();return;}
+/* MOCK_PRESENTATION_END */
   const cur=currentProfile();
   const loggedIn=!!(cur&&cur.binId&&sessionPasscode);
   const rows=syncProfiles.map(p=>{

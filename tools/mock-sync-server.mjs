@@ -3,6 +3,8 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import { extname, join } from 'node:path';
 
 const root = process.cwd();
+const port = Number(process.env.PORT || 4173);
+if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Invalid local preview port');
 const gistId = 'local-mock';
 const mock = { content: null, version: 0 };
 
@@ -77,7 +79,7 @@ const server = createServer(async (req, res) => {
   createReadStream(file).pipe(res);
 });
 
-server.listen(4173, '0.0.0.0', () => {
-  console.log('LOCAL_MOCK_SERVER_READY http://127.0.0.1:4173/?mockSync=1');
-  console.log('Use http://localhost:4173/?mockSync=1 as a second isolated browser origin.');
+server.listen(port, '0.0.0.0', () => {
+  console.log(`LOCAL_MOCK_SERVER_READY http://127.0.0.1:${port}/?mockSync=1`);
+  console.log(`Use http://localhost:${port}/?mockSync=1 as a second isolated browser origin.`);
 });

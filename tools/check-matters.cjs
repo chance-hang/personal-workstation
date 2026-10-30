@@ -5,10 +5,12 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const {execFileSync}=require('node:child_process');
 const {chromium}=require('playwright');
-const base=process.env.MATTERS_BASE_URL||'http://127.0.0.1:4173';
+const base=process.env.MATTERS_BASE_URL||'http://127.0.0.1:4184';
 const baseline='8c65431be7e243d833ff0e51b9b8c8e768c43e9a';
 const before=execFileSync('git',['show',baseline+':app.js'],{encoding:'utf8'}).replace(/\r\n/g,'\n');
-const after=fs.readFileSync('app.js','utf8').replace(/\r\n/g,'\n');
+// The explicitly marked additions only branch when MOCK_SYNC is true.
+// Removing them must leave all protected production paths byte-identical.
+const after=fs.readFileSync('app.js','utf8').replace(/\r\n/g,'\n').replace(/\/\* MOCK_PRESENTATION_START \*\/[\s\S]*?\/\* MOCK_PRESENTATION_END \*\/\n/g,'');
 let count=0,activeBrowser;
 function pass(name){count++;console.log('PASS '+name)}
 function protectedRange(name,start,end){
@@ -24,6 +26,7 @@ protectedRange('cloud bootstrap order','initFilters();\nrenderAll();',null);
 
 (async()=>{
  assert(['127.0.0.1','localhost'].includes(new URL(base).hostname),'Only a local Mock server is allowed');
+ assert.notEqual(new URL(base).port,'4173','Never reset the user acceptance service; start a dedicated test service on port 4184');
  await fetch(base+'/__mock_gists/local-mock',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:{'data.json':{content:null}}})});
  const browser=await chromium.launch({headless:true});activeBrowser=browser;
  const errors=[],external=[];
