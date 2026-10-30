@@ -1,5 +1,19 @@
 # RELEASE
 
+## 2026-10-30 当前发布清单：事项整合 v3.23.0
+
+- 用户本轮明确同意发布；Source `review/unified-matters` `f3021db50014024417394a8f2917a248e59199bc` 为 `Release Ready`。
+- 基线/回滚参照：`8c65431be7e243d833ff0e51b9b8c8e768c43e9a`。
+- 发布分支：`release/matters-v3.23.0`；目标 `main`；只允许已接受的事项整合和 UI/Mock 标识修正。
+- Source 文件白名单：`.gitignore`、`app.js`、`index.html`、`styles.css`、`docs/ACTIVE_TASK.md`、`docs/LOCAL_ACCEPTANCE.md`、`docs/MATTERS_ACCEPTANCE.md`、`docs/RELEASE.md`、`docs/UI_TOKENS.md`、`tools/build-review-preview.py`、`tools/mock-sync-server.mjs`、`tools/check-matters.cjs`、`tools/check-matters-mock-boundary.cjs`、`tools/check-matters-ui.cjs`。
+- 发布准备额外允许：`docs/RELEASE_HISTORY.md`、`tools/check-prod-matters.cjs`；原文件仅改正式版本展示、资源缓存参数及相应测试元信息。
+- 禁止修改：正式登录/凭据、Gist 路径及加密协议、原存储与 IndexedDB 路径、导入导出外层结构、初始化顺序、自动示例保护；禁止把 Mock 数据推到正式云端。
+- 回滚 bundle 已创建并验证，路径位于本次聊天输出目录，文件名 `prod-rollback-matters-8c65431.bundle`；采用新提交回滚，不强推历史。
+- 推荐提交：`release: publish unified matters v3.23.0`。
+- 用户已授权本轮发布，无需再次确认 main 合并；正式页面与真机的最终业务验收保留为发布后事项。
+
+以下待验收/禁止发布描述为历史记录，以本节为当前授权。
+
 ## 2026-10-30 事项整合 review（当前）
 
 - 状态：`Awaiting User Acceptance`，非 `Release Ready`，尚未发布。
