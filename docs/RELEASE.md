@@ -12,7 +12,7 @@
 - 正式资源缓存：`prod-budget-matters-20261116-1`。
 - 专用测试端口 4186，临时浏览器与合成数据；无真实账户/Gist 操作，不操作 4173/4185 验收数据。
 - 真机 Safari/系统键盘和真实账户业务操作由用户在发布后核对。
-- 当前：完成验证后执行已授权发布。具体证据见 `docs/RELEASE_AUDIT_V3_24.md`。
+- 当前：已发布正式 main，发布内容提交 `3c6072f4c6438bd1b964ec9b7ecc380904f5b19b`；Pages 构建 built，线上 HTML/JS/CSS HTTP 200 且逐字节匹配。等待发布后业务验收。具体证据见 `docs/RELEASE_AUDIT_V3_24.md`。
 
 ---
 
