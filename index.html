@@ -12,7 +12,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#1a1a1a">
 <title>个人工作台</title>
-  <link rel="stylesheet" href="styles.css?v=review-time-quadrants-3">
+  <link rel="stylesheet" href="styles.css?v=review-time-quadrants-4">
 </head>
 <body>
 <div class="main-area" id="mainArea">
@@ -511,8 +511,12 @@
             <div class="quadrant-grid" id="quadrantGrid" role="group" aria-label="任务矩阵，向上更重要，向右更紧急">
               <span class="quadrant-axis-label quadrant-axis-label-y" aria-hidden="true">重要程度</span>
               <span class="quadrant-axis-label quadrant-axis-label-x" aria-hidden="true">紧急程度</span>
-              <span class="quadrant-axis quadrant-axis-x" aria-hidden="true"></span>
-              <span class="quadrant-axis quadrant-axis-y" aria-hidden="true"></span>
+              <span class="quadrant-axis quadrant-axis-x" aria-hidden="true">
+                <svg viewBox="0 0 12 12" focusable="false"><path d="M2 1 11 6 2 11Z"/></svg>
+              </span>
+              <span class="quadrant-axis quadrant-axis-y" aria-hidden="true">
+                <svg viewBox="0 0 12 12" focusable="false"><path d="M1 10 6 1 11 10Z"/></svg>
+              </span>
               <div id="quadrantCells"></div>
             </div>
             <section id="quadrantMobileTasks" class="quadrant-mobile-tasks" aria-labelledby="quadrantMobileHeading"></section>
@@ -635,6 +639,6 @@
 <div class="modal-mask" id="modalMask"><div class="modal" id="modalBox"></div></div>
 
 
-  <script src="app.js?v=review-time-quadrants-3"></script>
+  <script src="app.js?v=review-time-quadrants-4"></script>
 </body>
 </html>

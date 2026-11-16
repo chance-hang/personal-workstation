@@ -57,6 +57,29 @@ async function ready(page,url){
   await page.waitForFunction(()=>MOCK_SYNC&&syncActive()&&!syncBusy);
   assert(await page.locator('#reviewEnvNotice').isVisible());
 }
+async function assertCenteredAxes(page){
+  const geometry=await page.evaluate(()=>{
+    const rect=selector=>document.querySelector(selector).getBoundingClientRect();
+    const cards=['2','1','4','3'].map(key=>rect('.quadrant-card[data-quadrant="'+key+'"]'));
+    const x=rect('.quadrant-axis-x'),y=rect('.quadrant-axis-y');
+    const arrowX=rect('.quadrant-axis-x path'),arrowY=rect('.quadrant-axis-y path');
+    const labelX=rect('.quadrant-axis-label-x'),labelY=rect('.quadrant-axis-label-y');
+    const near=(a,b)=>Math.abs(a-b)<.1;
+    const centerX=(cards[0].left+cards[1].right)/2,centerY=(cards[0].top+cards[2].bottom)/2;
+    return {
+      equalCards:cards.every(card=>near(card.width,cards[0].width)&&near(card.height,cards[0].height)),
+      centered:near((x.top+x.bottom)/2,centerY)&&near((y.left+y.right)/2,centerX),
+      arrowsCentered:near((arrowX.top+arrowX.bottom)/2,centerY)&&near((arrowY.left+arrowY.right)/2,centerX),
+      labelsClear:labelY.bottom<arrowY.top&&labelX.bottom<arrowX.top,
+      noOverflow:document.documentElement.scrollWidth<=innerWidth+1,
+      visibleRows:[...document.querySelectorAll('#quadrantGrid .quadrant-task')].filter(row=>row.offsetWidth).every(row=>{
+        const box=row.getBoundingClientRect(),cell=row.closest('.quadrant-card').getBoundingClientRect();
+        return box.right<=cell.right&&box.bottom<=cell.bottom;
+      })
+    };
+  });
+  assert(Object.values(geometry).every(Boolean),JSON.stringify(geometry));
+}
 async function submit(page,label){
   await page.getByRole('button',{name:label,exact:true}).click();
   await page.locator('#modalMask').waitFor({state:'hidden'});
@@ -109,7 +132,13 @@ async function startMock(){
   assert.match(await scopePage.locator('#quadrantScopeHint').textContent(),/显示 4 项未完成，其中 2 项未排期/);
   assert.equal(await boardRows.getByText('未排期 A').evaluate(el=>el.closest('[data-quadrant]').dataset.quadrant),'1');
   assert.equal(await boardRows.getByText('未排期 B').evaluate(el=>el.closest('[data-quadrant]').dataset.quadrant),'3');
-  if(envOutput)await scopePage.screenshot({path:path.join(envOutput,'quadrant-scope-1440.png'),animations:'disabled'});
+  await assertCenteredAxes(scopePage);
+  if(envOutput){
+    await scopePage.screenshot({path:path.join(envOutput,'quadrant-scope-1440.png'),animations:'disabled'});
+    await scopePage.setViewportSize({width:1440,height:1600});
+    await scopePage.locator('#quadrantGrid').screenshot({path:path.join(envOutput,'quadrant-axes-desktop.png'),animations:'disabled'});
+    await scopePage.setViewportSize({width:1440,height:1000});
+  }
   await scopePage.locator('#quadrantDay').fill(yesterday);
   assert.equal(await scope.inputValue(),'day');
   assert.equal(await boardRows.count(),0);
@@ -127,6 +156,27 @@ async function startMock(){
   assert.equal(await boardRows.count(),4);
   await scopePage.context().close();
   pass('默认四项未完成包含两条已分类未排期任务，各范围互通，复盘日期不改看板范围');
+
+  for(const scale of [1,1.25,1.5,2]){
+    const axisPage=await newPage(first,{viewport:{width:1280,height:1000},deviceScaleFactor:scale});
+    await ready(axisPage,first+view);
+    for(const content of ['empty','top-heavy','bottom-heavy']){
+      await axisPage.evaluate(({day,content})=>{
+        sessionPasscode=null;clearTimeout(syncTimer);
+        S.todos=content==='empty'?[]:Array.from({length:4},(_,index)=>newMatterTodo(
+          index===0?'任务标题需要换行时仍保持坐标轴居中与四格边界对齐：逐项核对清单并记录本次验收结果':'模拟任务 '+index,
+          day,{timePlan:{important:content==='top-heavy',urgent:true}}
+        ));
+        renderAll();
+      },{day:today,content});
+      await assertCenteredAxes(axisPage);
+      if(envOutput&&scale===1.5&&content==='bottom-heavy')await axisPage.locator('#quadrantGrid').screenshot({
+        path:path.join(envOutput,'quadrant-axes-long-tasks-150.png'),animations:'disabled'
+      });
+    }
+    await axisPage.context().close();
+  }
+  pass('空任务、上下数量不均、长标题及 1/1.25/1.5/2 像素密度：四格等大、交点居中、箭头同心、标签不重叠');
 
 
   await a.addInitScript(({oldId,today,testTitle})=>{
@@ -348,11 +398,12 @@ async function startMock(){
       return {width:innerWidth,scrollWidth:document.documentElement.scrollWidth,matrix,
         control:control.getBoundingClientRect().height,font:parseFloat(getComputedStyle(control).fontSize),
         board:$('#quadrantAddTime').getBoundingClientRect().height,filtersFit:rect('#quadrantScope').right<=innerWidth,
-        axisWeight:[getComputedStyle($('.quadrant-axis-x')).borderTopWidth,getComputedStyle($('.quadrant-axis-y')).borderLeftWidth],
+        axisWeight:[getComputedStyle($('.quadrant-axis-x'),'::before').height,getComputedStyle($('.quadrant-axis-y'),'::before').width],
         labelsFit:labels.every(el=>el.clientWidth>=el.scrollWidth&&el.getBoundingClientRect().height>=44)};
     });
     assert(layout.scrollWidth<=width+1&&layout.matrix,JSON.stringify(layout));
     assert.deepEqual(layout.axisWeight,['2px','2px']);
+    await assertCenteredAxes(phone);
     assert(layout.control>=44&&layout.board>=44&&layout.filtersFit&&layout.labelsFit&&(!touch||layout.font>=16),JSON.stringify(layout));
     const selectedTask=phone.locator('#quadrantMobileTasks [data-task-id="'+oldId+'"]');
     if(touch){
@@ -375,6 +426,11 @@ async function startMock(){
     if(envOutput&&[320,390,1440].includes(width)){
       await phone.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
       await phone.screenshot({path:path.join(envOutput,'quadrant-'+width+'.png'),animations:'disabled'});
+      if(width===390){
+        await phone.setViewportSize({width,height:1200});
+        await phone.locator('#quadrantGrid').screenshot({path:path.join(envOutput,'quadrant-axes-mobile.png'),animations:'disabled'});
+        await phone.setViewportSize({width,height:844});
+      }
     }
     if(touch){
       await selectedTask.getByRole('button',{name:'记用时'}).tap();
