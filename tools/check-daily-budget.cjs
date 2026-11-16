@@ -9,8 +9,8 @@ const output=process.env.BUDGET_OUTPUT;
 assert(['127.0.0.1','localhost'].includes(new URL(base).hostname));
 assert.equal(new URL(base).port,'4186','Only the dedicated budget test backend may be reset');
 const normalize=s=>s.replace(/\r\n/g,'\n');
-const baseline=normalize(execFileSync('git',['show','6b54759:app.js'],{encoding:'utf8'}));
-const source=normalize(fs.readFileSync('app.js','utf8')).replace(/\/\* MOCK_PRESENTATION_START \*\/\n    \/\/ Mock 日预算验收[\s\S]*?\/\* MOCK_PRESENTATION_END \*\/\n/,'');
+const baseline=normalize(execFileSync('git',['show','430da650c9725e31fdb7abbb615f3a9bcf9db87a:app.js'],{encoding:'utf8'}));
+const source=normalize(fs.readFileSync('app.js','utf8')).replace(/  \{version:'v3\.24\.0'[\s\S]*?\n  \]\},\n/,'').replace(/\/\* MOCK_PRESENTATION_START \*\/\n    \/\/ Mock 日预算验收[\s\S]*?\/\* MOCK_PRESENTATION_END \*\/\n/,'');
 const omit=s=>s.replace(/function renderFocusCard\(\)\{[\s\S]*?(?=\/\* ============ 账本)/,'');
 const unchanged=source
  .replace('renderFundManager();renderAssets();renderFocusCard();','renderFundManager();renderAssets();')

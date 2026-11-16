@@ -20,8 +20,8 @@ const reset=()=>fetch(base+'/__mock_gists/local-mock',{method:'PATCH',headers:{'
   const p=await c.newPage();p.on('pageerror',e=>errors.push(e.message));await p.clock.install({time:new Date('2026-10-30T06:00:00Z')});
   await p.goto(origin+(mobile?'/phone':'/?mockSync=1'));await p.waitForFunction(()=>syncActive()&&!syncBusy);
   assert.equal(new URL(p.url()).searchParams.get('mockSync'),'1');
-  assert(await p.locator('script[src*="review-daily-budget-20261030-2"]').count());
-  assert(await p.locator('link[href*="review-daily-budget-20261030-2"]').count());
+  assert(await p.locator('script[src*="prod-budget-matters-20261116-1"]').count());
+  assert(await p.locator('link[href*="prod-budget-matters-20261116-1"]').count());
   return {p,c,mobile};
  }
  const desktop=await open(1440),d=desktop.p;

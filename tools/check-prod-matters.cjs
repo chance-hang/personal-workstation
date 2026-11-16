@@ -7,16 +7,14 @@ const {execFileSync}=require('node:child_process');
 const {chromium}=require('playwright');
 const base=process.env.MATTERS_BASE_URL||'http://127.0.0.1:4184';
 assert(['127.0.0.1','localhost'].includes(new URL(base).hostname));assert.notEqual(new URL(base).port,'4173');
-const source='f3021db50014024417394a8f2917a248e59199bc';
+const source='c6e178f';
 const read=file=>execFileSync('git',['show',source+':'+file],{encoding:'utf8'}).replace(/\r\n/g,'\n');
 const app=fs.readFileSync('app.js','utf8').replace(/\r\n/g,'\n');
-const reviewedVersion="version:'v3.23.0-review',date:'2026-10-30',modules:['事项','今日','历史'],status:'待验收'";
-const releaseVersion="version:'v3.23.0',date:'2026-10-30',modules:['事项','今日','历史'],status:'已上线'";
-assert(app.includes(releaseVersion));assert.equal(app.replace(releaseVersion,reviewedVersion),read('app.js'));
+assert.equal(app.replace(/  \{version:'v3\.24\.0'[\s\S]*?\n  \]\},\n/,''),read('app.js'));
 assert.equal(fs.readFileSync('styles.css','utf8').replace(/\r\n/g,'\n'),read('styles.css'));
-assert.equal(fs.readFileSync('index.html','utf8').replace(/\r\n/g,'\n').replaceAll('prod-matters-20261030-1','review-matters-20261030-3'),read('index.html'));
+assert.equal(fs.readFileSync('index.html','utf8').replace(/\r\n/g,'\n').replaceAll('prod-budget-matters-20261116-1','review-daily-budget-20261030-2'),read('index.html'));
 let count=0,browser;function pass(name){count++;console.log('PASS '+name)}
-pass('release app/HTML differ from accepted review only by version/status/cache; CSS identical');
+pass('release app/HTML differ from combined accepted reviews only by version/status/cache; CSS identical');
 const seed={version:3,todos:[
  {id:'prod-old-open',text:'发布检查旧待办',date:'2026-10-29',done:false},
  {id:'prod-old-done',text:'发布检查旧已完成',date:'2026-10-20',done:true},
@@ -42,8 +40,8 @@ learning:{directions:[],contents:[],plans:[],questions:[],reviews:[],mistakes:[]
  const p=await c.newPage();await p.clock.install({time:new Date('2026-10-30T06:00:00Z')});
  await p.goto(base+'/');await p.locator('#loginPass').waitFor();
  assert(await p.evaluate(()=>!MOCK_SYNC&&!TEST_BUILD&&_LS_NS===''&&GITHUB_API==='https://api.github.com/gists'&&sessionPasscode===null&&POMO_KEY==='lifeworkbench_pomodoro_v1'));
- assert.equal(await p.locator('#aboutVer').innerText(),'v3.23.0');
- for(const asset of ['styles.css','app.js'])assert(responses.some(x=>x.url.includes(asset+'?v=prod-matters-20261030-1')&&x.status===200));
+ assert.equal(await p.locator('#aboutVer').innerText(),'v3.24.0');
+ for(const asset of ['styles.css','app.js'])assert(responses.some(x=>x.url.includes(asset+'?v=prod-budget-matters-20261116-1')&&x.status===200));
  pass('formal default storage, Gist target, login prompt, timer namespace and versioned assets');
  assert.equal(await p.locator('#reviewEnvNotice').isVisible(),false);
  const privacy=await p.locator('[data-module="cloudSync"] .privacy-box').innerText();assert(privacy.includes('AES-GCM')&&privacy.includes('HTTPS'));

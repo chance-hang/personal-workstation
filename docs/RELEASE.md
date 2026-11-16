@@ -1,5 +1,24 @@
 # RELEASE
 
+## 2026-11-16 日预算与备忘安排修复 v3.24.0
+
+用户在本聊天明确授权审计通过后更新两个功能到正式库。
+
+- Source：`review/daily-budget` `0689b16`、`review/note-to-todo-visibility` `430da65`；基线 `6b54759`。
+- 发布分支：`release/budget-matters-v3.24.0`，目标 `main`。
+- 范围：上述两分支功能、v3.24.0 更新说明、HTML 资源缓存版本、联合测试基线适配及发布文档；不引入其他分支。
+- 正式登录、localStorage/IndexedDB、Gist/加密、导入导出与初始化顺序保留；Mock 月预算接收仅在 MOCK_SYNC 分支生效。
+- 回滚：已验证完整历史 bundle `/workspace/daily-budget-review/prod-rollback-6b54759.bundle`；若需回滚，创建新提交，不强推、不自动回滚业务数据。
+- 正式资源缓存：`prod-budget-matters-20261116-1`。
+- 专用测试端口 4186，临时浏览器与合成数据；无真实账户/Gist 操作，不操作 4173/4185 验收数据。
+- 真机 Safari/系统键盘和真实账户业务操作由用户在发布后核对。
+- 当前：完成验证后执行已授权发布。具体证据见 `docs/RELEASE_AUDIT_V3_24.md`。
+
+---
+
+以下为历史发布记录。
+
+
 ## 2026-10-30 当前发布清单：事项整合 v3.23.0
 
 - 执行结果：已推送正式 `main`；发布内容提交 `127bb5b29050b72462a6d7a8266d3c33cdf41fd1`。

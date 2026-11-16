@@ -5,7 +5,7 @@ const fs=require('node:fs');
 const {chromium}=require('playwright');
 const base=process.env.MATTERS_BASE_URL||'http://127.0.0.1:4184';
 assert(['127.0.0.1','localhost'].includes(new URL(base).hostname));assert.notEqual(new URL(base).port,'4173');
-const baseline='6b54759f76818a1cdbf83c0138092f88fde9ef0c';
+const baseline='0689b163129afd1e947d2c0f427757a23606e830';
 const original=execFileSync('git',['show',baseline+':app.js'],{encoding:'utf8'}).replace(/\r\n/g,'\n');
 const source=fs.readFileSync('app.js','utf8').replace(/\r\n/g,'\n');
 let count=0,browser;const pass=name=>{count++;console.log('PASS '+name)};
@@ -21,7 +21,7 @@ for(const [name,start,end] of [
  assert(original.includes(start)&&source.includes(start));assert.equal(part(source),part(original),name);
 }
 assert.equal(fs.readFileSync('styles.css','utf8').replace(/\r\n/g,'\n'),execFileSync('git',['show',baseline+':styles.css'],{encoding:'utf8'}).replace(/\r\n/g,'\n'));
-pass('six protected source regions and all CSS identical to production baseline');
+pass('six protected source regions and all CSS identical to accepted daily-budget source');
 (async()=>{
  await fetch(base+'/__mock_gists/local-mock',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:{'data.json':{content:null}}})});
  browser=await chromium.launch({headless:true});const errors=[],external=[];
