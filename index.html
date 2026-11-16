@@ -12,7 +12,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#1a1a1a">
 <title>个人工作台</title>
-  <link rel="stylesheet" href="styles.css?v=prod-budget-matters-20261116-1">
+  <link rel="stylesheet" href="styles.css?v=review-time-quadrants-1">
 </head>
 <body>
 <div class="main-area" id="mainArea">
@@ -466,7 +466,11 @@
     <section class="page" id="page-notes">
       <div class="sec" data-module="notes">
         <div class="page-title">事项 · 待办与备忘</div>
-        <div class="card matters-workbench">
+        <div class="matter-tabs quadrant-view-switch" role="group" aria-label="事项工作区">
+          <button type="button" id="matterListTab" class="on" aria-controls="matterListView" aria-pressed="true">事项列表</button>
+          <button type="button" id="quadrantTab" aria-controls="quadrantView" aria-pressed="false">四象限时间管理</button>
+        </div>
+        <div class="card matters-workbench" id="matterListView">
           <div class="matters-heading"><div><h2>记录与安排</h2><p>随手记录，安排时间，追溯结果。</p></div><span id="noteCount" aria-live="polite"></span></div>
           <form id="matterCapture" class="matter-capture">
             <label for="memoIn" class="matter-label">随手记录</label>
@@ -480,6 +484,33 @@
           <div class="matter-list-heading"><span id="matterResult" aria-live="polite"></span><span>点“详情”补充说明与交付物</span></div>
           <div id="noteList" class="matter-list"></div>
         </div>
+        <section id="quadrantView" class="quadrant-workbench" aria-labelledby="quadrantHeading" hidden>
+          <div class="quadrant-toolbar">
+            <h2 id="quadrantHeading">四象限时间管理</h2>
+            <div class="quadrant-actions">
+              <button type="button" id="quadrantExport">导出</button>
+              <button type="button" class="matter-primary" id="quadrantAddTime">记用时</button>
+            </div>
+          </div>
+          <div class="quadrant-filters">
+            <label>查看日期<input id="quadrantDay" type="date" required></label>
+            <label id="quadrantScopeLabel">看板范围<select id="quadrantScope">
+              <option value="day">所选日期</option>
+              <option value="unscheduled">未安排日期</option>
+              <option value="all">全部待办</option>
+            </select></label>
+            <button type="button" id="quadrantToday">今天</button>
+          </div>
+          <div class="matter-tabs quadrant-modes" role="group" aria-label="四象限功能">
+            <button type="button" id="quadrantBoardTab" class="on" aria-controls="quadrantBoard" aria-pressed="true">任务看板</button>
+            <button type="button" id="quadrantReviewTab" aria-controls="quadrantReview" aria-pressed="false">每日复盘</button>
+          </div>
+          <div id="quadrantBoard">
+            <p class="quadrant-hint" id="quadrantScopeHint"></p>
+            <div class="quadrant-grid" id="quadrantGrid"></div>
+          </div>
+          <div id="quadrantReview" hidden></div>
+        </section>
       </div>
     </section>
 
@@ -596,6 +627,6 @@
 <div class="modal-mask" id="modalMask"><div class="modal" id="modalBox"></div></div>
 
 
-  <script src="app.js?v=prod-budget-matters-20261116-1"></script>
+  <script src="app.js?v=review-time-quadrants-1"></script>
 </body>
 </html>

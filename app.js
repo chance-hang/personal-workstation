@@ -2649,6 +2649,7 @@ const DEFAULT={
   version:3,
   todos:[], habits:[], ledger:[], budget:0,
   moods:{}, notes:[], countdowns:[], worklog:[],
+  timeEntries:[], dailyTimeReviews:[],
   customCats:{expense:[],income:[]},
   budgetCats:{},
   quickNotes:[],
@@ -4186,10 +4187,470 @@ function matterRow({kind,record:x}){
   return `<article class="matter-row ${x.done?'is-done':''}" data-kind="${kind}" data-id="${esc(x.id)}">
     <button type="button" class="matter-check" data-action="toggle" aria-label="${x.done?'重新打开':kind==='todo'?'完成待办':'归档备忘'}" aria-pressed="${!!x.done}"><span class="matter-check-mark" aria-hidden="true">${x.done?'<svg viewBox="0 0 16 16" fill="none"><path d="m4 8 2.5 2.5L12 5"/></svg>':kind==='note'?'<svg viewBox="0 0 16 16" fill="none"><path d="M5 5.5h6M5 8h6M5 10.5h4"/></svg>':''}</span></button>
     <div class="matter-row-body"><div class="matter-row-title"><b>${esc(title)}</b><span class="matter-badge ${kind==='todo'&&matterIsOverdue(x)?'overdue':''}">${status}</span></div>
-    ${body?`<p class="matter-excerpt">${esc(body)}</p>`:''}<div class="matter-row-meta"><span>${esc(stamp)}</span>${source?'<span>来自备忘</span>':''}${linked?'<span>已关联待办</span>':''}${matterReferences(x).length?`<span>交付物 ${matterReferences(x).length}</span>`:''}</div>
+    ${body?`<p class="matter-excerpt">${esc(body)}</p>`:''}<div class="matter-row-meta"><span>${esc(stamp)}</span>${kind==='todo'&&x.timePlan?`<span>${TIME_QUADRANTS[timeQuadrant(x)]}</span>`:''}${source?'<span>来自备忘</span>':''}${linked?'<span>已关联待办</span>':''}${matterReferences(x).length?`<span>交付物 ${matterReferences(x).length}</span>`:''}</div>
     ${x.completionNote?`<p class="matter-result-note">结果：${esc(x.completionNote)}</p>`:''}
     <div class="matter-row-actions"><button type="button" data-action="edit">详情</button>${kind==='note'?`<button type="button" data-action="convert">${linked?'查看待办':'安排为待办'}</button>`:''}<button type="button" data-action="delete">删除</button></div></div></article>`;
 }
+/* ============ 四象限时间管理 ============ */
+const TIME_QUADRANTS=Object.freeze({'1':'重要且紧急','2':'重要不紧急','3':'紧急不重要','4':'不重要不紧急','':'未分类'});
+const TIME_QUADRANT_KEYS=['1','2','3','4',''];
+
+function timePlanOf(task){
+  const plan=task?.timePlan;
+  return {
+    important:typeof plan?.important==='boolean'?plan.important:null,
+    urgent:typeof plan?.urgent==='boolean'?plan.urgent:null,
+    minutes:Number.isSafeInteger(plan?.minutes)&&plan.minutes>0&&plan.minutes<=1440?plan.minutes:null
+  };
+}
+
+function timeQuadrant(task){
+  const {important,urgent}=timePlanOf(task);
+  if(important===null||urgent===null)return '';
+  return important?(urgent?'1':'2'):(urgent?'3':'4');
+}
+
+function timeAxisMarkup(id,label,value){
+  return `<label class="matter-field">${label}<select id="${id}">
+    <option value="" ${value===null?'selected':''}>未判断</option>
+    <option value="yes" ${value===true?'selected':''}>是</option>
+    <option value="no" ${value===false?'selected':''}>否</option>
+  </select></label>`;
+}
+
+function timePlanMarkup(task){
+  const {important,urgent,minutes}=timePlanOf(task);
+  return `<fieldset class="quadrant-plan-fields"><legend>时间管理</legend>
+    <div class="matter-date-fields">${timeAxisMarkup('matterImportant','重要',important)}${timeAxisMarkup('matterUrgent','紧急',urgent)}</div>
+    <label class="matter-field quadrant-plan-minutes">计划用时（分钟，选填）<input id="matterPlanMinutes" type="number" inputmode="numeric" min="1" max="1440" step="1" value="${minutes??''}"></label>
+    <p class="matter-hint">分别判断重要和紧急。任一项留空时，这个任务显示为未分类。</p>
+  </fieldset>`;
+}
+
+function timeSavePlan(target,current,initial){
+  const axisValue=id=>({yes:true,no:false})[$('#'+id).value]??null;
+  const form={important:axisValue('matterImportant'),urgent:axisValue('matterUrgent'),minutes:$('#matterPlanMinutes').valueAsNumber||null};
+  const plan=timePlanOf(current);
+  // Merge only controls changed since opening, so a pull while the editor is open can supply newer values.
+  for(const field of Object.keys(plan)){
+    if(form[field]!==initial[field])plan[field]=form[field];
+  }
+  if(stableNote(plan)!==stableNote(timePlanOf(current))){
+    const updatedAt=new Date(Math.max(Date.now(),(noteUpdatedAt(current?.timePlan?.updatedAt)||0)+1)).toISOString();
+    target.timePlan={...plan,updatedAt};
+  }else if(current?.timePlan){
+    target.timePlan=current.timePlan;
+  }
+}
+
+function timeRecords(records){
+  return Array.isArray(records)?records.filter(record=>record&&typeof record.id==='string'&&record.id):[];
+}
+
+function timeMergeRecords(current,incoming,keepExisting=false){
+  const records=new Map(timeRecords(current).map(record=>[record.id,record]));
+  for(const record of timeRecords(incoming)){
+    const previous=records.get(record.id);
+    if(!previous||!keepExisting)records.set(record.id,timeNewest(previous,record));
+  }
+  return [...records.values()];
+}
+
+function timeNewest(a,b){
+  if(!a||!b)return a||b;
+  const at=noteUpdatedAt(a.updatedAt)??-Infinity;
+  const bt=noteUpdatedAt(b.updatedAt)??-Infinity;
+  if(at!==bt)return at>bt?a:b;
+  return stableNote(a)<=stableNote(b)?a:b;
+}
+
+function timeValidDay(value){
+  return typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&noteUpdatedAt(value)!==null;
+}
+
+function timeEntries(){
+  return timeRecords(S.timeEntries).filter(entry=>!entry.deletedAt&&timeValidDay(entry.day)&&Number.isInteger(entry.minutes)&&entry.minutes>0&&entry.minutes<=1440);
+}
+
+function timeDayEvents(task){
+  return (Array.isArray(task?.completionEvents)?task.completionEvents:[])
+    .filter(event=>event&&(event.action==='完成'||event.action==='重新打开')&&noteUpdatedAt(event.at)!==null)
+    .sort((a,b)=>noteUpdatedAt(a.at)-noteUpdatedAt(b.at));
+}
+
+function timeTaskStatus(task,day){
+  if(!task)return '状态未记录';
+  if(day>todayStr())return '该日期未到';
+  if(task.deletedAt&&matterLocalDay(task.deletedAt)<=day)return '已移除';
+  if(day===todayStr())return task.done?'已完成':'未完成';
+  const completedDay=task.done?matterLocalDay(task.completedAt):'';
+  if(completedDay&&completedDay<=day)return '已完成';
+  const events=timeDayEvents(task);
+  const latest=events.filter(event=>matterLocalDay(event.at)<=day).at(-1);
+  if(latest)return latest.action==='完成'?'已完成':'未完成';
+  if((task.done&&!completedDay)||events[0]?.action==='重新打开'||matterLocalDay(task.createdAt||task.date)>day)return '状态未记录';
+  return '未完成';
+}
+
+function timeDayData(day,entries=timeEntries(),tasks=timeRecords(S.todos),reviews=timeRecords(S.dailyTimeReviews)){
+  const logged=entries.filter(entry=>entry.day===day).sort((a,b)=>String(a.recordedAt||'').localeCompare(String(b.recordedAt||'')));
+  const related=new Map();
+  tasks.forEach(task=>{
+    const scheduled=!task.deletedAt||day<matterLocalDay(task.deletedAt);
+    if((scheduled&&todoDue(task).slice(0,10)===day)||todoCompletedDay(task)===day||
+       timeDayEvents(task).some(event=>matterLocalDay(event.at)===day)){
+      related.set(task.id,{task,title:task.text});
+    }
+  });
+  const byId=new Map(tasks.map(task=>[task.id,task]));
+  const totals=new Map();
+  for(const entry of logged){
+    if(!related.has(entry.taskId)){
+      const task=byId.get(entry.taskId);
+      related.set(entry.taskId,{task,title:task?.text||entry.taskTitle});
+    }
+    const key=Object.hasOwn(TIME_QUADRANTS,entry.quadrant)?entry.quadrant:'';
+    totals.set(key,(totals.get(key)||0)+entry.minutes);
+  }
+  return {logged,related,totals,review:reviews.find(record=>record.id===day)};
+}
+
+function timeSetPressed(button,on){
+  button.classList.toggle('on',on);
+  button.setAttribute('aria-pressed',String(on));
+}
+
+function setTimeQuadrantView(on){
+  $('#matterListView').hidden=on;
+  $('#quadrantView').hidden=!on;
+  timeSetPressed($('#matterListTab'),!on);
+  timeSetPressed($('#quadrantTab'),on);
+  if(on)renderTimeQuadrants();
+}
+
+function timeSetMode(review){
+  $('#quadrantBoard').hidden=review;
+  $('#quadrantReview').hidden=!review;
+  $('#quadrantScopeLabel').hidden=review;
+  timeSetPressed($('#quadrantBoardTab'),!review);
+  timeSetPressed($('#quadrantReviewTab'),review);
+  renderTimeQuadrants();
+}
+
+function timeSelectedDay(){
+  const input=$('#quadrantDay');
+  if(!timeValidDay(input.value))input.value=todayStr();
+  return input.value;
+}
+
+function timeBoardRow(task){
+  const due=todoDue(task).replace('T',' '),minutes=timePlanOf(task).minutes;
+  const status=task.done?'已完成':matterIsOverdue(task)?'已逾期':'未完成';
+  return `<article class="quadrant-task ${task.done?'is-done':''}" data-task-id="${esc(task.id)}">
+    <button type="button" class="matter-check" data-time-action="toggle" aria-label="${task.done?'重新打开':'完成'} ${esc(task.text)}" aria-pressed="${!!task.done}">
+      <span class="matter-check-mark" aria-hidden="true">${task.done?'<svg viewBox="0 0 16 16" fill="none"><path d="m4 8 2.5 2.5L12 5"/></svg>':''}</span>
+    </button>
+    <div class="quadrant-task-content"><div class="quadrant-task-title">${esc(task.text)}</div>
+      <div class="quadrant-meta">${status}${due?' · 计划 '+esc(due):''}${minutes?' · 计划用时 '+minutes+' 分钟':''}</div>
+      <div class="quadrant-task-actions"><button type="button" data-time-action="detail">详情 / 分类</button><button type="button" data-time-action="log">记用时</button></div>
+    </div>
+  </article>`;
+}
+
+function renderTimeBoard(data){
+  const scope=$('#quadrantScope').value;
+  const tasks=liveTodos().filter(task=>scope==='all'||(scope==='unscheduled'?!todoDue(task):data.related.has(task.id)));
+  const sorted=tasks.map(record=>({kind:'todo',record})).sort(matterSort);
+  const groups=new Map(TIME_QUADRANT_KEYS.map(key=>[key,[]]));
+  sorted.forEach(({record})=>groups.get(timeQuadrant(record)).push(record));
+  const hint={day:'日期视图包含当日计划、完成或重开，以及已记用时的任务。',unscheduled:'显示尚未安排计划日期的任务。',all:'显示所有待办。'};
+  $('#quadrantScopeHint').textContent='看板使用当前分类。'+hint[scope];
+  $('#quadrantGrid').innerHTML=TIME_QUADRANT_KEYS.map(key=>{
+    const items=groups.get(key);
+    const empty=key?'暂无任务':'旧任务和判断尚未填全的任务显示于此。';
+    return `<section class="quadrant-card" data-quadrant="${key}" aria-labelledby="quadrantGroup${key||'None'}">
+      <div class="quadrant-card-heading"><h3 id="quadrantGroup${key||'None'}">${key?'<i class="quadrant-mark" aria-hidden="true"></i>':''}${TIME_QUADRANTS[key]}</h3><span>${items.length} 项</span></div>
+      ${items.length?items.map(timeBoardRow).join(''):`<p class="quadrant-empty">${empty}</p>`}
+    </section>`;
+  }).join('');
+}
+
+function timeEntryKind(entry){
+  if(!entry.recordedOn)return '录入日期未记录';
+  if(entry.day<entry.recordedOn)return '回顾补记';
+  return entry.day===entry.recordedOn?'当日记录':'日期已更正';
+}
+
+function renderTimeReview(day,data){
+  const {logged,related,totals,review}=data;
+  const total=logged.reduce((sum,entry)=>sum+entry.minutes,0);
+  const insertions=logged.filter(entry=>entry.interruption);
+  const insertedMinutes=insertions.reduce((sum,entry)=>sum+entry.minutes,0);
+  $('#quadrantReview').innerHTML=`<section class="quadrant-review-card">
+    <div class="quadrant-review-header"><h3>实际用时</h3><span class="quadrant-meta">${logged.length?`已记录 ${total} 分钟`:'未记录'}</span></div>
+    <dl class="quadrant-summary">${TIME_QUADRANT_KEYS.map(key=>`<div><dt>${TIME_QUADRANTS[key]}</dt><dd>${totals.has(key)?totals.get(key)+' 分钟':'未记录'}</dd></div>`).join('')}</dl>
+    <p class="quadrant-hint">${insertions.length?`临时插入 ${insertions.length} 条，共 ${insertedMinutes} 分钟，已计入上方。`:'临时插入事项未记录。'}</p>
+    ${logged.length?`<ul class="quadrant-review-list">${logged.map(entry=>`<li class="quadrant-entry">
+      <strong>${esc(entry.taskTitle||'任务名称未记录')} · ${entry.minutes} 分钟</strong>
+      <div class="quadrant-meta">${TIME_QUADRANTS[timeHistoricQuadrant(entry.quadrant)]} · ${timeEntryKind(entry)}${entry.interruption?' · 临时插入':''} · 录入 ${esc(matterTimeLabel(entry.recordedAt))}</div>
+      ${entry.note?`<p>${esc(entry.note)}</p>`:''}<button type="button" data-time-action="edit-log" data-entry-id="${esc(entry.id)}">编辑用时</button>
+    </li>`).join('')}</ul>`:''}
+  </section>
+  <section class="quadrant-review-card">
+    <div class="quadrant-review-header"><h3>相关任务</h3><span class="quadrant-meta">${day===todayStr()?'当前状态':'所选日期状态'}</span></div>
+    ${related.size?`<ul class="quadrant-review-list">${[...related.values()].map(({task,title})=>`<li class="quadrant-entry">
+      <strong>${esc(title||'任务名称未记录')}</strong> <span class="quadrant-meta">${timeTaskStatus(task,day)}</span>
+      ${task&&!task.deletedAt?`<button type="button" data-time-action="detail" data-task-id="${esc(task.id)}">详情</button>`:''}
+    </li>`).join('')}</ul>`:'<p class="quadrant-empty">这一天暂无相关任务。</p>'}
+  </section>
+  <section class="quadrant-review-card">
+    <div class="quadrant-review-header"><h3>复盘记录</h3><button type="button" data-time-action="review" ${day>todayStr()?'disabled':''}>${review?'编辑复盘':'写复盘'}</button></div>
+    <div class="quadrant-meta">未完成原因</div><p class="quadrant-review-text">${esc(review?.reason||'未填写')}</p>
+    <div class="quadrant-meta">次日调整</div><p class="quadrant-review-text">${esc(review?.adjustment||'未填写')}</p>
+    ${review?`<div class="quadrant-meta">录入 ${esc(matterTimeLabel(review.recordedAt))} · ${timeEntryKind(review)}</div>`:''}
+  </section>`;
+}
+
+function renderTimeQuadrants(){
+  if($('#quadrantView').hidden)return;
+  const day=timeSelectedDay(),data=timeDayData(day);
+  if($('#quadrantReview').hidden)renderTimeBoard(data);
+  else renderTimeReview(day,data);
+}
+
+function timeDialog(title,fields,submit,extra=''){
+  const opener=document.activeElement;
+  modal(`<div id="timeDialogContent" role="dialog" aria-modal="true" aria-labelledby="timeDialogTitle"><h4 id="timeDialogTitle">${title}<button type="button" class="modal-close" id="timeDialogClose" aria-label="关闭">×</button></h4>
+    <form id="timeDialogForm">${fields}<p id="timeDialogError" class="matter-error" role="alert"></p>
+    <div class="btns">${extra}<button type="button" class="cancel" id="timeDialogCancel">取消</button><button type="submit" class="ok">${submit}</button></div></form></div>`,{noMaskClose:true});
+  $('#modalBox').classList.add('matter-dialog','quadrant-dialog');
+  const finish=()=>{
+    closeModal();
+    if(opener?.isConnected)opener.focus();
+    else $('#quadrantReviewTab').focus();
+  };
+  $('#timeDialogClose').onclick=finish;
+  $('#timeDialogCancel').onclick=finish;
+  $('#timeDialogContent').addEventListener('keydown',event=>{
+    if(event.key==='Escape'){
+      event.preventDefault();event.stopPropagation();finish();return;
+    }
+    if(event.key!=='Tab')return;
+    const items=event.currentTarget.querySelectorAll('button:not(:disabled),input:not(:disabled),select,textarea');
+    const first=items[0],last=items[items.length-1];
+    if((event.shiftKey&&document.activeElement===first)||(!event.shiftKey&&document.activeElement===last)){
+      event.preventDefault();(event.shiftKey?last:first).focus();
+    }
+  });
+  $('#timeDialogForm').querySelector('input,select,textarea')?.focus();
+  return finish;
+}
+
+function timePut(field,record){
+  const records=timeRecords(S[field]);
+  const index=records.findIndex(item=>item.id===record.id);
+  if(index===-1)records.push(record);
+  else records[index]=record;
+  S[field]=records;
+  persist();
+  renderTimeQuadrants();
+}
+
+function timeHistoricQuadrant(key){
+  return TIME_QUADRANT_KEYS.includes(key)?key:'';
+}
+
+function openTimeEntry(taskId='',entryId=''){
+  const original=timeEntries().find(entry=>entry.id===entryId);
+  const tasks=liveTodos().map(record=>({kind:'todo',record})).sort(matterSort).map(item=>item.record);
+  if(!tasks.length&&!original){toast('请先通过事项列表新建待办');return;}
+  const selectedId=original?.taskId||taskId;
+  const day=original?.day||[timeSelectedDay(),todayStr()].sort()[0];
+  const historicalTask=original&&!tasks.some(task=>task.id===original.taskId);
+  const options=tasks.map(task=>`<option value="${esc(task.id)}" ${task.id===selectedId?'selected':''}>${esc(task.text)}${task.done?'（已完成）':''}</option>`);
+  if(historicalTask)options.push(`<option value="${esc(original.taskId)}" selected>${esc(original.taskTitle)}（已移除）</option>`);
+  const finish=timeDialog(original?'编辑实际用时':'记实际用时',`
+    <label class="quadrant-field">关联待办<select id="timeEntryTask" required><option value="">选择任务</option>${options.join('')}</select></label>
+    <div class="quadrant-dialog-fields">
+      <label>实际发生日期<input type="date" id="timeEntryDay" required max="${todayStr()}" value="${day}"></label>
+      <label>实际投入（分钟）<input type="number" inputmode="numeric" id="timeEntryMinutes" required min="1" max="1440" step="1" value="${original?.minutes??''}"></label>
+    </div>
+    <label class="quadrant-field">发生时的象限<select id="timeEntryQuadrant">${TIME_QUADRANT_KEYS.map(key=>`<option value="${key}">${TIME_QUADRANTS[key]}</option>`).join('')}</select></label>
+    <p class="quadrant-hint" id="timeEntryQuadrantHint"></p>
+    <label class="quadrant-check"><input type="checkbox" id="timeEntryInterruption" ${original?.interruption?'checked':''}>临时插入事项</label>
+    <label class="quadrant-field">备注（选填）<textarea id="timeEntryNote" rows="3" maxlength="2000">${esc(original?.note||'')}</textarea></label>
+  `,'保存用时',original?'<button type="button" class="cancel" id="timeEntryDelete">删除记录</button>':'');
+  const error=$('#timeDialogError'),taskInput=$('#timeEntryTask'),dayInput=$('#timeEntryDay'),quadrantInput=$('#timeEntryQuadrant');
+  const suggestQuadrant=()=>{
+    const same=original?.day===dayInput.value&&original.taskId===taskInput.value;
+    const today=dayInput.value===todayStr();
+    quadrantInput.value=same?timeHistoricQuadrant(original.quadrant):today?timeQuadrant(liveTodos().find(task=>task.id===taskInput.value)):'';
+    $('#timeEntryQuadrantHint').textContent=same?'此处保留已保存的象限，可手动更正。':today?'默认采用待办当前分类，可按实际情况调整。':'补记时请选择发生当时的象限，记不清可保留未分类。';
+  };
+  taskInput.onchange=dayInput.onchange=suggestQuadrant;
+  suggestQuadrant();
+  const currentEntry=()=>{
+    const current=timeEntries().find(entry=>entry.id===entryId);
+    if(original&&(!current||stableNote(current)!==stableNote(original))){
+      error.textContent='这条记录已在其他页面更新，请关闭后重新打开。';
+      return null;
+    }
+    return current||{};
+  };
+  if(original)$('#timeEntryDelete').onclick=()=>{
+    const current=currentEntry();
+    if(!current||!confirm('删除这条实际用时记录？'))return;
+    const updatedAt=timeEditTimestamp(current);
+    timePut('timeEntries',{...current,updatedAt,deletedAt:updatedAt});
+    finish();toast('用时记录已删除');
+  };
+  $('#timeDialogForm').onsubmit=event=>{
+    event.preventDefault();
+    const task=liveTodos().find(item=>item.id===taskInput.value);
+    const current=currentEntry();
+    if(!current)return;
+    const nextDay=dayInput.value,minutes=$('#timeEntryMinutes').valueAsNumber;
+    if(!task&&(!current.id||taskInput.value!==current.taskId)){error.textContent='请重新选择可用待办。';return;}
+    if(!timeValidDay(nextDay)||nextDay>todayStr()||!Number.isInteger(minutes)||minutes<1||minutes>1440){
+      error.textContent='请选择今天或更早的日期，填写 1–1440 的整数分钟。';return;
+    }
+    const updatedAt=timeEditTimestamp(current);
+    timePut('timeEntries',{
+      id:current.id||(crypto.randomUUID?.()||uid()),
+      taskId:taskInput.value,
+      taskTitle:current.id&&current.taskId===taskInput.value?current.taskTitle:task.text,
+      day:nextDay,minutes,quadrant:timeHistoricQuadrant(quadrantInput.value),
+      interruption:$('#timeEntryInterruption').checked,note:$('#timeEntryNote').value.trim(),
+      recordedAt:current.recordedAt||updatedAt,recordedOn:current.recordedOn||todayStr(),updatedAt
+    });
+    $('#quadrantDay').value=nextDay;
+    timeSetMode(true);
+    finish();toast('实际用时已保存');
+  };
+}
+
+function timeEditTimestamp(record){
+  return new Date(Math.max(Date.now(),(noteUpdatedAt(record?.updatedAt)||0)+1)).toISOString();
+}
+
+function openTimeReview(day){
+  if(day>todayStr())return;
+  const original=timeRecords(S.dailyTimeReviews).find(record=>record.id===day);
+  const finish=timeDialog('编辑每日复盘',`
+    <p class="quadrant-hint">${day}</p>
+    <label class="quadrant-field">未完成原因<textarea id="timeReviewReason" rows="4" maxlength="3000">${esc(original?.reason||'')}</textarea></label>
+    <label class="quadrant-field">次日调整<textarea id="timeReviewAdjustment" rows="4" maxlength="3000">${esc(original?.adjustment||'')}</textarea></label>
+  `,'保存复盘');
+  $('#timeDialogForm').onsubmit=event=>{
+    event.preventDefault();
+    const current=timeRecords(S.dailyTimeReviews).find(record=>record.id===day);
+    if(stableNote(original)!==stableNote(current)){$('#timeDialogError').textContent='复盘已更新，请关闭后重新打开。';return;}
+    const reason=$('#timeReviewReason').value.trim(),adjustment=$('#timeReviewAdjustment').value.trim();
+    if(!current&&!reason&&!adjustment){$('#timeDialogError').textContent='请至少填写一项。';return;}
+    const updatedAt=timeEditTimestamp(current);
+    timePut('dailyTimeReviews',{id:day,day,reason,adjustment,recordedAt:current?.recordedAt||updatedAt,recordedOn:current?.recordedOn||todayStr(),updatedAt});
+    finish();toast('每日复盘已保存');
+  };
+}
+
+function timeMarkdownCell(value){
+  return String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/[\\`*_[\]|~]/g,'\\$&').replace(/\r?\n/g,'<br>');
+}
+
+function timeMarkdownTable(columns,rows){
+  const line=cells=>'| '+cells.map(timeMarkdownCell).join(' | ')+' |';
+  return [line(columns),line(columns.map(()=>'---')),...rows.map(line)].join('\n');
+}
+
+function timeReport(from,to){
+  const entries=timeEntries().filter(entry=>entry.day>=from&&entry.day<=to);
+  const tasks=timeRecords(S.todos);
+  const reviews=timeRecords(S.dailyTimeReviews).filter(review=>timeValidDay(review.id)&&review.id>=from&&review.id<=to);
+  const days=new Set([...entries.map(entry=>entry.day),...reviews.map(review=>review.id)]);
+  for(const task of tasks){
+    const due=todoDue(task).slice(0,10);
+    const candidates=[(!task.deletedAt||due<matterLocalDay(task.deletedAt))?due:'',todoCompletedDay(task),...timeDayEvents(task).map(event=>matterLocalDay(event.at))];
+    for(const day of candidates){
+      if(timeValidDay(day)&&day>=from&&day<=to)days.add(day);
+    }
+  }
+  const sections=['# 四象限时间管理记录',`${from} 至 ${to}`,'任务表列出当前分类和计划信息。实际用时按各条记录保存的发生时象限汇总，空白表示未记录。'];
+  if(!days.size)sections.push('区间内暂无相关任务、实际用时或复盘记录。');
+  for(const day of [...days].sort()){
+    const {logged,related,totals,review}=timeDayData(day,entries,tasks,reviews);
+    sections.push(`## ${day}`,'### 相关任务',
+      timeMarkdownTable(['任务 ID','任务','当前象限','计划完成','计划分钟','当日状态'],
+        [...related].map(([id,{task,title}])=>[id,title,task?TIME_QUADRANTS[timeQuadrant(task)]:'',task?todoDue(task).replace('T',' '):'',timePlanOf(task).minutes,timeTaskStatus(task,day)])),
+      '### 实际用时汇总',
+      timeMarkdownTable(['发生时象限','已记录分钟'],TIME_QUADRANT_KEYS.map(key=>[TIME_QUADRANTS[key],totals.get(key)])),
+      '### 实际用时明细',
+      timeMarkdownTable(['发生日期','任务 ID','记录时任务名','发生时象限','投入分钟','临时插入','记录类型','首次录入时间','最后编辑时间','备注'],
+        logged.map(entry=>[day,entry.taskId,entry.taskTitle,TIME_QUADRANTS[timeHistoricQuadrant(entry.quadrant)],entry.minutes,entry.interruption?'是':'否',timeEntryKind(entry),entry.recordedAt,entry.updatedAt,entry.note])),
+      '### 每日复盘',
+      timeMarkdownTable(['未完成原因','次日调整','记录类型','首次录入时间','最后编辑时间'],
+        review?[[review.reason,review.adjustment,timeEntryKind(review),review.recordedAt,review.updatedAt]]:[]));
+  }
+  return sections.join('\n\n')+'\n';
+}
+
+function openTimeExport(){
+  const day=timeSelectedDay();
+  const finish=timeDialog('导出四象限记录',`
+    <div class="quadrant-dialog-fields">
+      <label>开始日期<input id="timeExportFrom" type="date" required value="${day}"></label>
+      <label>结束日期<input id="timeExportTo" type="date" required value="${day}"></label>
+    </div>
+    <p class="quadrant-hint">Markdown 文件包含相关任务、用时汇总与明细、每日复盘。</p>
+  `,'下载 Markdown','<button type="button" class="cancel" id="timeExportCopy">复制</button>');
+  const data=()=>{
+    const from=$('#timeExportFrom').value,to=$('#timeExportTo').value;
+    if(!timeValidDay(from)||!timeValidDay(to)||from>to){
+      $('#timeDialogError').textContent='请输入有效的起止日期，结束日期应等于或晚于开始日期。';
+      return null;
+    }
+    $('#timeDialogError').textContent='';
+    return {from,to,text:timeReport(from,to)};
+  };
+  $('#timeExportCopy').onclick=()=>{const report=data();if(report)copyText(report.text,'已复制四象限记录');};
+  $('#timeDialogForm').onsubmit=event=>{
+    event.preventDefault();
+    const report=data();if(!report)return;
+    const link=document.createElement('a');
+    link.href=URL.createObjectURL(new Blob([report.text],{type:'text/markdown;charset=utf-8'}));
+    link.download=`四象限_${report.from}_${report.to}.md`;
+    document.body.append(link);link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(link.href),1000);
+    finish();toast('四象限记录已下载');
+  };
+}
+
+$('#matterListTab').onclick=()=>setTimeQuadrantView(false);
+$('#quadrantTab').onclick=()=>setTimeQuadrantView(true);
+$('#quadrantBoardTab').onclick=()=>timeSetMode(false);
+$('#quadrantReviewTab').onclick=()=>timeSetMode(true);
+$('#quadrantDay').onchange=renderTimeQuadrants;
+$('#quadrantScope').onchange=renderTimeQuadrants;
+$('#quadrantToday').onclick=()=>{$('#quadrantDay').value=todayStr();renderTimeQuadrants();};
+$('#quadrantAddTime').onclick=()=>openTimeEntry();
+$('#quadrantExport').onclick=openTimeExport;
+$('#quadrantView').addEventListener('click',event=>{
+  const button=event.target.closest('[data-time-action]');if(!button)return;
+  const taskId=button.closest('[data-task-id]')?.dataset.taskId;
+  switch(button.dataset.timeAction){
+    case 'detail':openMatter('todo',taskId);break;
+    case 'toggle':{
+      matterToggle('todo',taskId);
+      const row=$('#quadrantGrid .quadrant-task[data-task-id="'+CSS.escape(taskId)+'"]');
+      (row?.querySelector('.matter-check')||$('#quadrantBoardTab')).focus();
+      break;
+    }
+    case 'log':openTimeEntry(taskId);break;
+    case 'edit-log':openTimeEntry('',button.dataset.entryId);break;
+    case 'review':openTimeReview(timeSelectedDay());break;
+  }
+});
+
 function matterRowsHtml(list,grouped=false){
   if(!grouped)return list.map(matterRow).join('');
   const groups=new Map();
@@ -4203,10 +4664,11 @@ function matterRowsHtml(list,grouped=false){
 let matterView='pending',matterLimit=40,matterHomeRevealId='';
 function openMatters(view='pending'){
   matterView=view;matterLimit=40;
+  setTimeQuadrantView(false);
   $('#matterSearch').value='';$('#matterType').value='all';$('#matterFrom').value='';$('#matterTo').value='';
   goTab('notes');renderNotes();
 }
-function refreshMatters(){renderHeader();renderTodos();renderFocusCard();renderNotes();renderHistory();renderHeat()}
+function refreshMatters(){renderHeader();renderTodos();renderFocusCard();renderNotes();renderHistory();renderHeat();renderTimeQuadrants()}
 function renderNotes(){
   const tasks=liveTodos(),notes=liveNotes();
   $('#noteCount').textContent=`${tasks.filter(x=>!x.done).length} 项待完成 · ${notes.length} 条备忘`;
@@ -4280,6 +4742,7 @@ function revealArrangedMatter(task){
 function openMatter(kind,id,options={}){
   const x=options.draft||(kind==='todo'?liveTodos():liveNotes()).find(x=>x.id===id);if(!x)return;
   const todo=kind==='todo',source=todo?matterSource(x):null,due=todo?todoDue(x):'';
+  const initialPlan=todo?timePlanOf(x):null;
   const linkable=todo?liveNotes().filter(n=>n.id===x.sourceNoteId||!liveTodos().some(t=>t.id!==id&&t.sourceNoteId===n.id)):[];
   const linked=!todo?liveTodos().find(t=>t.sourceNoteId===id):null;
   modal(`<h4>${options.draft?'安排为待办':todo?'待办详情':'备忘详情'}<button type="button" class="modal-close" id="matterClose" aria-label="关闭">×</button></h4>
@@ -4289,6 +4752,7 @@ function openMatter(kind,id,options={}){
     ${todo?`<label class="matter-field">关联备忘（选填）<select id="matterLinkedNote"><option value="">不关联</option>${linkable.map(n=>`<option value="${esc(n.id)}" ${n.id===x.sourceNoteId?'selected':''}>${esc(n.title||noteTitle(n.content))}</option>`).join('')}</select></label>`:''}
     ${source?`<details class="matter-source"><summary>关联的原备忘：${esc(source.title||noteTitle(source.content))}</summary><p>${esc(source.content||'')}</p><button type="button" id="matterSourceOpen">编辑原备忘</button></details>`:''}
     ${todo?`<div class="matter-date-fields"><label class="matter-field">计划完成日期<input id="matterDueDate" type="date" value="${esc(due.slice(0,10))}"></label><label class="matter-field">时间（选填）<input id="matterDueTime" type="time" value="${esc(due.slice(11,16))}"></label></div><div class="matter-date-shortcuts" id="matterDueShortcuts"><button type="button" data-days="0">今天</button><button type="button" data-days="1">明天</button><button type="button" data-days="week">本周</button><button type="button" data-days="none">不设时间</button></div>`:''}
+    ${todo?timePlanMarkup(x):''}
     <label class="matter-field">状态<select id="matterStatus"><option value="pending" ${!x.done?'selected':''}>${todo?'未完成':'保留备忘'}</option><option value="done" ${x.done?'selected':''}>${todo?'已完成':'已归档'}</option></select></label>
     <label class="matter-field">${todo?'完成说明（选填）':'补充说明（选填）'}<textarea id="matterCompletionNote" rows="2" maxlength="10000">${esc(x.completionNote||'')}</textarea></label>
     <label class="matter-field">${todo?'交付物':'相关资料'}（选填，每行一条链接或路径）<textarea id="matterDeliverables" rows="3" maxlength="20000" placeholder="文档链接、文件路径，或交付说明">${esc(matterReferences(x).join('\n'))}</textarea></label>
@@ -4302,6 +4766,9 @@ function openMatter(kind,id,options={}){
   // 表单使用稳定字段快照检测改动，关闭时不静默保存。
   const snapshot=()=>[...form.querySelectorAll('input,textarea,select')].map(e=>e.value).join('\u0000');
   const original=snapshot();
+  const baseSnapshot=()=>[...form.querySelectorAll('input,textarea,select')]
+    .filter(control=>!control.closest('.quadrant-plan-fields')).map(control=>control.value).join('\u0000');
+  const originalBase=baseSnapshot();
   const cancel=()=>{if(snapshot()===original||confirm('放弃尚未保存的修改？'))closeModal()};
   $('#matterClose').onclick=cancel;$('#matterCancel').onclick=cancel;
   if(todo)$('#matterDueShortcuts').onclick=e=>{const b=e.target.closest('[data-days]');if(!b)return;const date=new Date();if(b.dataset.days==='none'){$('#matterDueDate').value='';$('#matterDueTime').value='';return}const days=b.dataset.days==='week'?(7-date.getDay())%7:Number(b.dataset.days);date.setDate(date.getDate()+days);$('#matterDueDate').value=fmtDate(date)};
@@ -4314,7 +4781,13 @@ function openMatter(kind,id,options={}){
     if(time&&!date){$('#matterEditError').textContent='请先选择计划日期，或清除时间。';return}
     const records=todo?S.todos:S.notes,index=records.findIndex(r=>r.id===id),current=records[index];
     if(!options.draft&&(!current||current.deletedAt)){$('#matterEditError').textContent='这条事项已被移除，请关闭后重新查看。';return}
-    if(todo){x.text=title;x.details=body;x.dueAt=date+(date&&time?'T'+time:'');x.sourceNoteId=$('#matterLinkedNote').value;matterSetDone(x,$('#matterStatus').value==='done');}
+    if(todo&&!options.draft&&current&&baseSnapshot()===originalBase){
+      timeSavePlan(current,current,initialPlan);
+      persist();closeModal();
+      if(options.reveal)revealArrangedMatter(current);else{refreshMatters();toast('事项已保存')}
+      return;
+    }
+    if(todo){timeSavePlan(x,current||x,initialPlan);x.text=title;x.details=body;x.dueAt=date+(date&&time?'T'+time:'');x.sourceNoteId=$('#matterLinkedNote').value;matterSetDone(x,$('#matterStatus').value==='done');}
     else{x.title=title;x.content=body;x.done=$('#matterStatus').value==='done';}
     x.completionNote=$('#matterCompletionNote').value.trim();x.deliverables=$('#matterDeliverables').value.split('\n').map(s=>s.trim()).filter(Boolean);
     // 同步合并可能已替换数组中的对象，按 ID 写回当前数组，避免保存到旧引用。
@@ -4598,7 +5071,20 @@ function openMergePaste(){
 }
 function mergeData(d){
   let add={todos:0,ledger:0,notes:0,countdowns:0,habits:0,moods:0,worklog:0,learning:0};
-  if(Array.isArray(d.todos))d.todos.forEach(t=>{if(t.id&&!S.todos.some(x=>x.id===t.id)){S.todos.push(t);add.todos++}});
+  if(Array.isArray(d.todos))d.todos.forEach(t=>{
+    if(!t?.id)return;
+    const existing=S.todos.find(x=>x.id===t.id);
+    if(!existing){S.todos.push(t);add.todos++;}
+    else if(!existing.timePlan&&t.timePlan)existing.timePlan=t.timePlan;
+  });
+  const countTimeRecords=(field,label)=>{
+    if(!Array.isArray(d[field]))return '';
+    const before=timeRecords(S[field]).length;
+    S[field]=timeMergeRecords(S[field],d[field],true);
+    const added=S[field].length-before;
+    return added>0?`<span class="qn-pv-chip">新增 <b>${added}</b>条${label}</span>`:'';
+  };
+  const timeChips=[countTimeRecords('timeEntries','实际用时'),countTimeRecords('dailyTimeReviews','每日复盘')].filter(Boolean);
   if(Array.isArray(d.ledger))d.ledger.forEach(t=>{if(t.id&&!S.ledger.some(x=>x.id===t.id)){S.ledger.push(t);add.ledger++}});
   if(Array.isArray(d.notes))d.notes.forEach(t=>{if(t.id&&!S.notes.some(x=>x.id===t.id)){S.notes.push(t);add.notes++}});
   if(Array.isArray(d.countdowns))d.countdowns.forEach(t=>{if(t.id&&!S.countdowns.some(x=>x.id===t.id)){S.countdowns.push(t);add.countdowns++}});
@@ -4628,7 +5114,7 @@ function mergeData(d){
       d.customCats[tp].forEach(c=>{if(c&&c.name&&!S.customCats[tp].some(x=>x.name===c.name))S.customCats[tp].push({name:c.name,color:c.color||'#888888'})});
     });
   }
-  let chips=[];
+  const chips=[...timeChips];
   if(add.todos)chips.push(`<span class="qn-pv-chip">新增 <b>${add.todos}</b>条待办</span>`);
   if(add.ledger)chips.push(`<span class="qn-pv-chip">新增 <b>${add.ledger}</b>笔账目</span>`);
   if(add.notes)chips.push(`<span class="qn-pv-chip">新增 <b>${add.notes}</b>条备忘</span>`);
@@ -5217,6 +5703,19 @@ function mergeState(remote){
      ——避免「本地空 history 覆盖远端已打卡记录」导致打卡数据跨设备丢失 */
   const delIds=new Set(Object.keys(S.habitArchive||{}));
   const mergedTodos=mergeNotesByUpdatedAt(S.todos,remote.todos);
+  // Keep time planning metadata independent from edits to the todo's ordinary fields.
+  const priorPlans=new Map(timeRecords(S.todos).map(task=>[task.id,task.timePlan]));
+  const remotePlans=new Map(timeRecords(remote.todos).map(task=>[task.id,task.timePlan]));
+  mergedTodos.forEach(task=>{
+    const plan=timeNewest(priorPlans.get(task.id),remotePlans.get(task.id));
+    if(plan)task.timePlan=plan;
+  });
+  for(const field of ['timeEntries','dailyTimeReviews']){
+    if(!Array.isArray(remote[field]))continue;
+    const records=timeMergeRecords(S[field],remote[field]);
+    if(stableNote(records)!==stableNote(timeRecords(S[field])))changed=true;
+    S[field]=records;
+  }
   if(stableNote(mergedTodos)!==stableNote(S.todos||[]))changed=true;
   S.todos=mergedTodos;
   (function(){
@@ -6352,7 +6851,7 @@ function initFilters(){
   const[mf,mt]=rangeOf('thisMonth');setFlowRange(mf,mt,'thisMonth');
   const[hf,ht]=rangeOf('7');setHisRange(hf,ht,'7');
 }
-function renderAll(){renderHeader();renderTodos();renderHabits();renderMoney();renderHeat();renderHistory();renderNotes();renderWorklog();renderTodayStat();renderFocusCard();renderChangelog();renderAbout();renderLearning();applyModuleLayout();renderStorageHealth();renderPomodoro()}
+function renderAll(){renderHeader();renderTodos();renderHabits();renderMoney();renderHeat();renderHistory();renderNotes();renderWorklog();renderTodayStat();renderFocusCard();renderChangelog();renderAbout();renderLearning();applyModuleLayout();renderStorageHealth();renderPomodoro();renderTimeQuadrants()}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
 /* 首次使用预置示例：仅限测试版（TEST_BUILD）。
@@ -8103,6 +8602,9 @@ pomoTick();
 
 initFilters();
 renderAll();
+if(MOCK_SYNC&&location.hash==='#time-quadrants'){
+  goTab('notes');setTimeQuadrantView(true);
+}
 
 /* v3.20.3: 学习方向卡全局 click 事件委托（替代 inline onclick，绕开 iOS PWA 缓存断链） */
 (function bindLnHomeCardClick(){

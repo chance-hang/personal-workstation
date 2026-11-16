@@ -1,0 +1,326 @@
+/* Automated acceptance uses an empty, dedicated Mock on port 4188 and disposable browser contexts. */
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const {execFileSync,spawn}=require('node:child_process');
+const {once}=require('node:events');
+const {chromium}=require('playwright');
+
+const first='http://127.0.0.1:4188';
+const second='http://localhost:4188';
+const view='/?mockSync=1#time-quadrants';
+const today='2026-11-16';
+const yesterday='2026-11-15';
+const oldId='quadrant-old-task';
+const testTitle='核对项目交付清单';
+const envOutput=process.env.QUADRANT_UI_OUTPUT;
+let browser,server;
+let checks=0;
+const pass=label=>console.log('PASS '+(++checks)+' '+label);
+
+function assertProtectedSource(){
+  const baseline=execFileSync('git',['show','22d7a41417ebf8c8241c2f025c43deebc599921b:app.js'],{encoding:'utf8'}).replace(/\r\n/g,'\n');
+  const source=fs.readFileSync('app.js','utf8').replace(/\r\n/g,'\n');
+  const fromTo=(text,from,to)=>text.slice(text.indexOf(from),to?text.indexOf(to,text.indexOf(from)):undefined);
+  const protectedAreas=[
+    ['const _realLS = window.localStorage;','/* ============ 工具函数'],
+    ['let S=load();','/* ============ 弹窗 ============ */'],
+    ['const SYNC_KEY=','function noteUpdatedAt('],
+    ['async function cloudPull(','function renderChangelog('],
+    ["$('#exportBtn').onclick",'function mergeData(d)'],
+    ['const POMO_KEY=','initFilters();\nrenderAll();'],
+    ['/* 云同步初始化 */',null]
+  ];
+  for(const [from,to] of protectedAreas){
+    assert(source.includes(from)&&baseline.includes(from));
+    assert.equal(fromTo(source,from,to),fromTo(baseline,from,to),from);
+  }
+  pass('存储命名空间、保存与镜像、Gist/加密/登录、备份入口、番茄逻辑和云初始化代码一致');
+}
+
+const errors=[],external=[];
+async function newPage(origin,settings={}){
+  const context=await browser.newContext({timezoneId:'Asia/Shanghai',acceptDownloads:true,...settings});
+  await context.route('**/*',route=>{
+    const url=route.request().url();
+    if(new URL(url).origin===origin)return route.continue();
+    external.push(url);return route.abort();
+  });
+  const page=await context.newPage();
+  page.setDefaultTimeout(8000);
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.clock.install({time:new Date(today+'T03:00:00Z')});
+  return page;
+}
+async function ready(page,url){
+  await page.goto(url);
+  await page.waitForFunction(()=>MOCK_SYNC&&syncActive()&&!syncBusy);
+  assert(await page.locator('#reviewEnvNotice').isVisible());
+}
+async function submit(page,label){
+  await page.getByRole('button',{name:label,exact:true}).click();
+  await page.locator('#modalMask').waitFor({state:'hidden'});
+}
+async function startMock(){
+  server=spawn(process.execPath,['tools/mock-sync-server.mjs'],{
+    env:{...process.env,PORT:'4188',MOCK_PREVIEW_ONLY:'1',MOCK_BIND_HOST:'127.0.0.1'},
+    stdio:['ignore','pipe','pipe'],windowsHide:true
+  });
+  const timeout=AbortSignal.timeout(6000);
+  await Promise.race([
+    once(server.stdout,'data',{signal:timeout}).then(([chunk])=>assert.match(String(chunk),/LOCAL_MOCK_SERVER_READY/)),
+    once(server,'exit',{signal:timeout}).then(([code])=>{throw new Error('Dedicated Mock exited: '+code);})
+  ]);
+}
+
+(async()=>{
+  assertProtectedSource();
+  await startMock();
+  browser=await chromium.launch({headless:true,executablePath:process.env.QUADRANT_BROWSER||undefined});
+  const a=await newPage(first,{viewport:{width:1366,height:900}});
+  const b=await newPage(second,{viewport:{width:1366,height:900}});
+  const redirect=await a.request.get(first+'/?t=1',{maxRedirects:0});
+  assert.equal(redirect.status(),302);
+  assert.match(redirect.headers().location,/mockSync=1/);
+  const response=await a.request.get(first+view);
+  assert.match(response.headers()['content-security-policy'],/connect-src 'self'/);
+  const remote=await (await a.request.get(first+'/__mock_gists/local-mock')).json();
+  assert.deepEqual(remote.files,{},'A fresh dedicated server is required');
+  assert.equal((await a.request.get(first+'/.git/config')).status(),404);
+  pass('独立预览强制 Mock，仅允许本源网络，Git 元数据不可经预览服务读取');
+
+  await a.addInitScript(({oldId,today,testTitle})=>{
+    if(!localStorage.getItem('lifeworkbench_v1')){
+      localStorage.setItem('lifeworkbench_v1',JSON.stringify({
+        version:3,todos:[{id:oldId,text:testTitle,date:today,done:false},{id:'undated',text:'未定日期待办',date:today,dueAt:'',done:false}],
+        notes:[],habits:[],ledger:[],countdowns:[],worklog:[{id:'pomo-unrelated',date:today,text:'[番茄专注] 既有日志 · 25 分钟'}]
+      }));
+    }
+  },{oldId,today,testTitle});
+  await ready(a,first+view);
+  assert(await a.locator('#quadrantGrid [data-quadrant=""] .quadrant-task').getByText(testTitle).isVisible());
+  assert.equal(await a.evaluate(id=>S.todos.find(t=>t.id===id).timePlan,oldId),undefined);
+  await a.locator('#quadrantScope').selectOption('unscheduled');
+  assert(await a.locator('#quadrantGrid').getByText('未定日期待办').isVisible());
+  await a.locator('#quadrantScope').selectOption('day');
+  pass('旧待办未分类，空计划日期可从独立范围查看');
+
+  const row=a.locator('#quadrantGrid [data-task-id="'+oldId+'"]');
+  await row.getByRole('button',{name:'详情 / 分类'}).click();
+  await a.locator('#matterImportant').selectOption('yes');
+  await submit(a,'保存');
+  assert.equal(await row.locator('..').getAttribute('data-quadrant'),'');
+  await row.getByRole('button',{name:'详情 / 分类'}).click();
+  await a.locator('#matterUrgent').selectOption('no');
+  await a.locator('#matterPlanMinutes').fill('50');
+  await submit(a,'保存');
+  assert.equal(await row.locator('..').getAttribute('data-quadrant'),'2');
+  assert(await row.getByText('计划用时 50 分钟',{exact:false}).isVisible());
+  assert.equal(await a.evaluate(id=>todoDue(S.todos.find(t=>t.id===id)),oldId),today);
+  assert.equal(await a.locator('#pomoTodo option[value="'+oldId+'"]').textContent(),testTitle);
+  await a.locator('#matterListTab').click();
+  assert(await a.locator('#noteList').getByText('重要不紧急').isVisible());
+  await a.locator('#quadrantTab').click();
+  pass('两项判断可分别留空，分类、计划日期与计划分钟独立，列表、看板、番茄使用同一 ID');
+
+  await row.getByRole('button',{name:'记用时'}).click();
+  assert.equal(await a.locator('#timeEntryTask').inputValue(),oldId);
+  assert.equal(await a.locator('#timeEntryQuadrant').inputValue(),'2');
+  await a.locator('#timeEntryMinutes').fill('35');
+  await a.locator('#timeEntryNote').fill('校对 A|B\n复核签字 <完成>');
+  await submit(a,'保存用时');
+  assert(await a.locator('#quadrantReview').getByText('已记录 35 分钟').isVisible());
+  assert.equal(await a.locator('#quadrantReview dd').allTextContents().then(x=>x.join('|')),'未记录|35 分钟|未记录|未记录|未记录');
+  await a.locator('#quadrantAddTime').click();
+  await a.locator('#timeEntryTask').selectOption(oldId);
+  await a.locator('#timeEntryMinutes').fill('10');
+  await a.locator('#timeEntryInterruption').check();
+  await submit(a,'保存用时');
+  assert(await a.locator('#quadrantReview').getByText('临时插入 1 条，共 10 分钟，已计入上方。').isVisible());
+  assert(await a.locator('#quadrantReview').getByText('已记录 45 分钟').isVisible());
+  pass('同任务同日可多段计时，临时插入只累计一次，计划和既有番茄日志不混入实际用时');
+
+  await a.locator('#quadrantBoardTab').click();
+  await row.getByRole('button',{name:'详情 / 分类'}).click();
+  await a.locator('#matterUrgent').selectOption('yes');
+  await submit(a,'保存');
+  assert.equal(await row.locator('..').getAttribute('data-quadrant'),'1');
+  await row.getByRole('button',{name:'完成 '+testTitle}).click();
+  await a.locator('#quadrantReviewTab').click();
+  assert(await a.locator('#quadrantReview').getByText('已完成',{exact:true}).isVisible());
+  assert.equal(await a.locator('#quadrantReview dd').allTextContents().then(x=>x.join('|')),'未记录|45 分钟|未记录|未记录|未记录');
+  pass('重新分类和任务完成后，历史实际用时仍保留记录时象限');
+
+  await a.locator('#quadrantAddTime').click();
+  await a.locator('#timeEntryTask').selectOption(oldId);
+  await a.locator('#timeEntryDay').fill(yesterday);
+  assert.equal(await a.locator('#timeEntryQuadrant').inputValue(),'');
+  await a.locator('#timeEntryQuadrant').selectOption('3');
+  await a.locator('#timeEntryMinutes').fill('8');
+  await submit(a,'保存用时');
+  assert(await a.locator('#quadrantReview').getByText(/回顾补记/).isVisible());
+  assert(await a.locator('#quadrantReview').getByText('状态未记录',{exact:true}).isVisible());
+  await a.locator('#quadrantReview').getByRole('button',{name:'写复盘'}).click();
+  await a.locator('#timeReviewReason').fill('客户反馈尚未收齐');
+  await a.locator('#timeReviewAdjustment').fill('先确认缺失项，再预约复核');
+  await submit(a,'保存复盘');
+  assert(await a.locator('#quadrantReview').getByText('客户反馈尚未收齐').isVisible());
+  pass('历史补记默认未分类，自选发生时象限并保留发生日与首次录入日');
+
+  await a.locator('#quadrantExport').click();
+  await a.locator('#timeExportFrom').fill(today);
+  await a.locator('#timeExportTo').fill(yesterday);
+  await a.getByRole('button',{name:'下载 Markdown'}).click();
+  assert(await a.locator('#timeDialogError').getByText(/结束日期/).isVisible());
+  await a.locator('#timeExportFrom').fill(yesterday);
+  await a.locator('#timeExportTo').fill(today);
+  const downloadPromise=a.waitForEvent('download');
+  await submit(a,'下载 Markdown');
+  const download=await downloadPromise;
+  const report=fs.readFileSync(await download.path(),'utf8');
+  assert.match(download.suggestedFilename(),/\.md$/);
+  assert(report.includes('## '+yesterday)&&report.includes('## '+today)&&!report.includes('## 2026-11-14'));
+  assert(report.includes('| 重要不紧急 | 45 |')&&report.includes('| 重要且紧急 |  |'));
+  assert(report.includes('客户反馈尚未收齐')&&report.includes('回顾补记')&&report.includes(oldId));
+  assert(report.includes('校对 A\\|B<br>复核签字 &lt;完成&gt;'));
+  pass('Markdown 按日期区间导出同一任务 ID、当前分类、历史用时及复盘，未记录的汇总留空');
+
+  await a.evaluate(()=>cloudPush());
+  await ready(b,second+view);
+  assert.equal(await b.evaluate(()=>timeEntries().length),3);
+  assert.equal(await b.evaluate(()=>S.dailyTimeReviews[0].adjustment),'先确认缺失项，再预约复核');
+  assert.equal(await b.evaluate(id=>timeQuadrant(S.todos.find(task=>task.id===id)),oldId),'1');
+  await b.locator('#quadrantDay').fill(yesterday);
+  await b.locator('#quadrantReviewTab').click();
+  await b.locator('#quadrantReview').getByRole('button',{name:'编辑用时'}).click();
+  assert.equal(await b.locator('#timeEntryQuadrant').inputValue(),'3');
+  await b.locator('#timeEntryMinutes').fill('12');
+  await submit(b,'保存用时');
+  const corrected=await b.evaluate(day=>timeEntries().find(entry=>entry.day===day),yesterday);
+  assert.equal(corrected.recordedOn,today);
+  assert.equal(corrected.quadrant,'3');
+  await b.evaluate(()=>cloudPush());
+  await a.evaluate(()=>cloudPull());
+  assert.equal(await a.evaluate(day=>timeEntries().find(entry=>entry.day===day).minutes,yesterday),12);
+  pass('双来源 Mock 同步设置、时间明细、复盘和更正，首次录入信息保留');
+
+  await b.locator('#quadrantToday').click();
+  await b.locator('#quadrantReview .quadrant-entry').filter({hasText:'· 10 分钟'}).getByRole('button',{name:'编辑用时'}).click();
+  b.once('dialog',dialog=>dialog.accept());
+  await submit(b,'删除记录');
+  await b.evaluate(()=>cloudPush());
+  await a.evaluate(()=>cloudPull());
+  assert.equal(await a.evaluate(()=>timeEntries().length),2);
+  assert.equal(await a.evaluate(()=>S.timeEntries.filter(entry=>entry.deletedAt).length),1);
+  await a.reload();
+  await a.waitForFunction(()=>MOCK_SYNC&&syncActive()&&!syncBusy);
+  assert.equal(await a.evaluate(()=>timeEntries().length),2);
+  assert.equal(await a.evaluate(()=>S.dailyTimeReviews.length),1);
+  await a.waitForFunction(async()=>JSON.parse((await readLocalMirror('current'))?.json||'{}').timeEntries?.some(entry=>entry.deletedAt));
+  const mirror=await a.evaluate(async()=>JSON.parse((await readLocalMirror('current')).json));
+  assert.equal(mirror.timeEntries.length,3);
+  assert.equal(mirror.dailyTimeReviews.length,1);
+  pass('双端删除不会被旧副本复活，刷新与 IndexedDB 镜像保留数据');
+
+  await a.locator('nav.tabbar a[data-p="me"]').click();
+  await a.locator('#exportBtn').click();
+  const backupPromise=a.waitForEvent('download');
+  await submit(a,'下载文件');
+  const backup=fs.readFileSync(await (await backupPromise).path(),'utf8');
+  const backupJSON=JSON.parse(backup);
+  assert.equal(backupJSON.todos.find(t=>t.id===oldId).timePlan.minutes,50);
+  assert.equal(backupJSON.timeEntries.length,3);
+  assert.equal(backupJSON.dailyTimeReviews.length,1);
+
+  const c=await newPage(first);
+  await ready(c,first+view);
+  // Only synthetic state and this disposable page are used during backup import.
+  const restore=async json=>{
+    await c.locator('#importFile').setInputFiles({name:'test.json',mimeType:'application/json',buffer:Buffer.from(json)});
+    await submit(c,'覆盖导入');
+  };
+  await c.evaluate(()=>{sessionPasscode=null;clearTimeout(syncTimer);});
+  await restore(JSON.stringify({todos:[{id:oldId,text:testTitle,date:today,done:false}],worklog:[]}));
+  assert.equal(await c.evaluate(()=>timeEntries().length),0);
+  await c.locator('#mergeFile').setInputFiles({name:'test.json',mimeType:'application/json',buffer:Buffer.from(backup)});
+  await submit(c,'好的');
+  assert.equal(await c.evaluate(id=>timeQuadrant(S.todos.find(task=>task.id===id)),oldId),'1');
+  assert.equal(await c.evaluate(()=>S.todos.find(t=>t.id==='quadrant-old-task').done),false);
+  assert.equal(await c.evaluate(()=>timeEntries().length),2);
+  await restore(backup);
+  assert.equal(await c.evaluate(()=>timeEntries().length),2);
+  assert.equal(await c.evaluate(()=>S.dailyTimeReviews.length),1);
+  assert.equal(await c.evaluate(()=>S.todos.find(t=>t.id==='quadrant-old-task').done),true);
+  pass('原 JSON 备份实际下载、旧版覆盖导入、合并补字段及新版覆盖还原通过');
+
+  await c.locator('#quadrantTab').click();
+  await c.locator('#quadrantGrid [data-task-id="'+oldId+'"]').getByRole('button',{name:'详情 / 分类'}).click();
+  await c.evaluate(id=>{
+    const current=S.todos.find(task=>task.id===id);
+    const remote={...current,dueAt:'2026-11-17',updatedAt:'2026-11-16T03:05:00.000Z'};
+    delete remote.timePlan;
+    applyPulledState({todos:[remote]});
+  },oldId);
+  await c.locator('#matterUrgent').selectOption('no');
+  await submit(c,'保存');
+  assert.deepEqual(await c.evaluate(id=>{
+    const task=S.todos.find(task=>task.id===id);
+    return [todoDue(task),timeQuadrant(task),timePlanOf(task).minutes];
+  },oldId),['2026-11-17','2',50]);
+  pass('详情打开期间收到新计划日期时，修改分类保留最新的计划日期和原计划用时');
+
+
+  await ready(a,first+view);
+  await a.locator('nav.tabbar a[data-p="today"]').click();
+  await a.locator('#pomoTodo').selectOption('undated');
+  await a.locator('#pomoPrimary').click();
+  await a.clock.fastForward(25*60*1000+1000);
+  const focus=await a.evaluate(()=>pomoState.history[0]);
+  assert.equal(focus.taskId,'undated');
+  assert.equal(focus.duration,25*60*1000);
+  await a.locator('#pomoPrimary').click();
+  await a.clock.fastForward(5*60*1000+1000);
+  assert.equal(await a.evaluate(()=>pomoState.history.length),1);
+  assert.equal(await a.evaluate(()=>timeEntries().length),2);
+  await a.locator('[data-pomo-record]').click();
+  await a.locator('#pomoWriteLog').check();
+  await submit(a,'保存小结');
+  await a.evaluate(()=>cloudPush());
+  await b.evaluate(()=>cloudPull());
+  assert.equal(await b.evaluate(()=>pomoState.history.length),0);
+  assert(await b.evaluate(()=>S.worklog.some(record=>record.text.includes('[番茄专注] 未定日期待办'))));
+  assert.equal(await b.evaluate(()=>timeEntries().length),2);
+  pass('番茄工作段保留任务 ID，休息不进专注历史，可选工作日志跨端同步，手工用时合计保持不变');
+
+  for(const width of [320,375,390,414,768,1440]){
+    const touch=width<600;
+    const phone=await newPage(first,{viewport:{width,height:touch?844:1000},hasTouch:touch,isMobile:touch,deviceScaleFactor:1});
+    await ready(phone,first+view);
+    const layout=await phone.evaluate(()=>{
+      const grid=$('#quadrantGrid'),control=$('#quadrantDay');
+      return {width:innerWidth,scrollWidth:document.documentElement.scrollWidth,
+        columns:getComputedStyle(grid).gridTemplateColumns.split(' ').length,
+        control:control.getBoundingClientRect().height,font:parseFloat(getComputedStyle(control).fontSize),
+        board:$('#quadrantAddTime').getBoundingClientRect().height,
+        segmentFits:[...$$('.quadrant-view-switch button,.quadrant-modes button')].every(el=>el.clientWidth>=el.scrollWidth&&el.clientHeight>=44)};
+    });
+    assert(layout.scrollWidth<=width+1,JSON.stringify(layout));
+    assert.equal(layout.columns,touch?1:2);
+    assert(layout.control>=44&&layout.board>=44&&layout.segmentFits&&(!touch||layout.font>=16),JSON.stringify(layout));
+    if(envOutput&&[390,1440].includes(width))await phone.screenshot({path:path.join(envOutput,'quadrant-'+width+'.png'),animations:'disabled'});
+    await phone.locator('#quadrantAddTime').click();
+    const box=await phone.locator('#modalBox').boundingBox();
+    assert(box.x>=0&&box.x+box.width<=width+1);
+    if(envOutput&&width===390)await phone.screenshot({path:path.join(envOutput,'quadrant-record-390.png'),animations:'disabled'});
+    await submit(phone,'取消');
+    await phone.locator('#quadrantReviewTab').click();
+    assert(await phone.locator('#quadrantReview').getByText('已记录 35 分钟').isVisible());
+    if(envOutput&&width===390)await phone.screenshot({path:path.join(envOutput,'quadrant-review-390.png'),animations:'disabled',fullPage:true});
+    await phone.context().close();
+    pass(width+'px：列数、点击范围、无横向溢出、弹窗与复盘');
+  }
+  assert.deepEqual(external,[]);
+  assert.deepEqual(errors,[]);
+  pass('浏览器全程零外部请求、零页面脚本错误');
+})().catch(error=>{console.error(error);process.exitCode=1;})
+  .finally(async()=>{if(browser)await browser.close();server?.kill();});
