@@ -1247,7 +1247,7 @@ summary::-webkit-details-marker{color:var(--text)}
 
 
 /* finesse · register=product · scope=time-quadrants · A=existing-ink · B=600/400 · C=axis-matrix-and-review · D=state-feedback · E=quiet-paper · SOUL=3 SPECTACLE=1 DENSITY=6 */
-.quadrant-view-switch,.quadrant-modes{grid-template-columns:repeat(2,minmax(0,1fr));max-width:420px}
+.quadrant-view-switch,.quadrant-modes{grid-template-columns:repeat(2,minmax(0,1fr));width:100%;max-width:none}
 .quadrant-view-switch{margin-bottom:var(--ui-space-3)}
 .quadrant-view-switch button{min-height:var(--ui-hit-size)}
 .quadrant-workbench{min-width:0}

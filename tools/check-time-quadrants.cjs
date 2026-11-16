@@ -383,8 +383,8 @@ async function startMock(){
   assert.equal(await b.evaluate(()=>timeEntries().length),2);
   pass('番茄工作段保留任务 ID，休息不进专注历史，可选工作日志跨端同步，手工用时合计保持不变');
 
-  for(const width of [320,375,390,414,768,1440]){
-    const touch=width<600;
+  for(const width of [320,375,390,414,560,640,759,760,768,1024,1440]){
+    const touch=width<760;
     const phone=await newPage(first,{viewport:{width,height:touch?844:1000},hasTouch:touch,isMobile:touch,deviceScaleFactor:1});
     await ready(phone,first+view);
     await phone.locator('#quadrantToday').click();
@@ -395,13 +395,18 @@ async function startMock(){
       const matrix=items[0].right<=y.left&&y.right<=items[1].left&&items[0].bottom<=x.top&&x.bottom<=items[2].top&&
         items[0].left===items[2].left&&items[1].left===items[3].left;
       const labels=[...$$('.quadrant-view-switch button,.quadrant-modes button,.quadrant-cell-toggle')].filter(el=>el.offsetWidth);
-      return {width:innerWidth,scrollWidth:document.documentElement.scrollWidth,matrix,
+      const boundaries=['.quadrant-view-switch','.quadrant-toolbar','.quadrant-modes','#quadrantGrid'].map(rect);
+      const aligned=boundaries.every(box=>Math.abs(box.left-boundaries[0].left)<.1&&Math.abs(box.right-boundaries[0].right)<.1);
+      const actions=rect('.quadrant-actions'),heading=rect('#quadrantHeading');
+      return {width:innerWidth,scrollWidth:document.documentElement.scrollWidth,matrix,aligned,
+        actionsAligned:Math.abs(actions.right-boundaries[0].right)<.1&&heading.right<=actions.left,
+
         control:control.getBoundingClientRect().height,font:parseFloat(getComputedStyle(control).fontSize),
         board:$('#quadrantAddTime').getBoundingClientRect().height,filtersFit:rect('#quadrantScope').right<=innerWidth,
         axisWeight:[getComputedStyle($('.quadrant-axis-x'),'::before').height,getComputedStyle($('.quadrant-axis-y'),'::before').width],
         labelsFit:labels.every(el=>el.clientWidth>=el.scrollWidth&&el.getBoundingClientRect().height>=44)};
     });
-    assert(layout.scrollWidth<=width+1&&layout.matrix,JSON.stringify(layout));
+    assert(layout.scrollWidth<=width+1&&layout.matrix&&layout.aligned&&layout.actionsAligned,JSON.stringify(layout));
     assert.deepEqual(layout.axisWeight,['2px','2px']);
     await assertCenteredAxes(phone);
     assert(layout.control>=44&&layout.board>=44&&layout.filtersFit&&layout.labelsFit&&(!touch||layout.font>=16),JSON.stringify(layout));
@@ -423,7 +428,7 @@ async function startMock(){
       assert(!(await phone.locator('#quadrantMobileTasks').isVisible()));
       assert(await phone.locator('#quadrantGrid [data-task-id="'+oldId+'"]').isVisible());
     }
-    if(envOutput&&[320,390,1440].includes(width)){
+    if(envOutput&&[320,390,560,760,1024,1440].includes(width)){
       await phone.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
       await phone.screenshot({path:path.join(envOutput,'quadrant-'+width+'.png'),animations:'disabled'});
       if(width===390){
@@ -466,7 +471,7 @@ async function startMock(){
     assert(await phone.locator('#quadrantReview').getByText('已记录 35 分钟').isVisible());
     if(envOutput&&width===390)await phone.screenshot({path:path.join(envOutput,'quadrant-review-390.png'),animations:'disabled',fullPage:true});
     await phone.context().close();
-    pass(width+'px：坐标轴方位、触控范围、任务切换、弹窗与复盘');
+    pass(width+'px：切换栏与工具栏对齐、坐标轴方位、触控范围、任务切换、弹窗与复盘');
   }
   assert.deepEqual(external,[]);
   assert.deepEqual(errors,[]);
