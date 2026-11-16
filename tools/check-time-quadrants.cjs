@@ -109,12 +109,12 @@ async function startMock(){
   await row.getByRole('button',{name:'详情 / 分类'}).click();
   await a.locator('#matterImportant').selectOption('yes');
   await submit(a,'保存');
-  assert.equal(await row.locator('..').getAttribute('data-quadrant'),'');
+  assert.equal(await row.evaluate(el=>el.closest('[data-quadrant]').dataset.quadrant),'');
   await row.getByRole('button',{name:'详情 / 分类'}).click();
   await a.locator('#matterUrgent').selectOption('no');
   await a.locator('#matterPlanMinutes').fill('50');
   await submit(a,'保存');
-  assert.equal(await row.locator('..').getAttribute('data-quadrant'),'2');
+  assert.equal(await row.evaluate(el=>el.closest('[data-quadrant]').dataset.quadrant),'2');
   assert(await row.getByText('计划用时 50 分钟',{exact:false}).isVisible());
   assert.equal(await a.evaluate(id=>todoDue(S.todos.find(t=>t.id===id)),oldId),today);
   assert.equal(await a.locator('#pomoTodo option[value="'+oldId+'"]').textContent(),testTitle);
@@ -144,7 +144,7 @@ async function startMock(){
   await row.getByRole('button',{name:'详情 / 分类'}).click();
   await a.locator('#matterUrgent').selectOption('yes');
   await submit(a,'保存');
-  assert.equal(await row.locator('..').getAttribute('data-quadrant'),'1');
+  assert.equal(await row.evaluate(el=>el.closest('[data-quadrant]').dataset.quadrant),'1');
   await row.getByRole('button',{name:'完成 '+testTitle}).click();
   await a.locator('#quadrantReviewTab').click();
   assert(await a.locator('#quadrantReview').getByText('已完成',{exact:true}).isVisible());
@@ -297,27 +297,76 @@ async function startMock(){
     const phone=await newPage(first,{viewport:{width,height:touch?844:1000},hasTouch:touch,isMobile:touch,deviceScaleFactor:1});
     await ready(phone,first+view);
     const layout=await phone.evaluate(()=>{
-      const grid=$('#quadrantGrid'),control=$('#quadrantDay');
-      return {width:innerWidth,scrollWidth:document.documentElement.scrollWidth,
-        columns:getComputedStyle(grid).gridTemplateColumns.split(' ').length,
+      const control=$('#quadrantDay'),rect=sel=>$(sel).getBoundingClientRect();
+      const items=['2','1','4','3'].map(key=>rect('.quadrant-card[data-quadrant="'+key+'"]'));
+      const x=rect('.quadrant-axis-x'),y=rect('.quadrant-axis-y');
+      const matrix=items[0].right<=y.left&&y.right<=items[1].left&&items[0].bottom<=x.top&&x.bottom<=items[2].top&&
+        items[0].left===items[2].left&&items[1].left===items[3].left;
+      const labels=[...$$('.quadrant-view-switch button,.quadrant-modes button,.quadrant-cell-toggle')].filter(el=>el.offsetWidth);
+      return {width:innerWidth,scrollWidth:document.documentElement.scrollWidth,matrix,
         control:control.getBoundingClientRect().height,font:parseFloat(getComputedStyle(control).fontSize),
-        board:$('#quadrantAddTime').getBoundingClientRect().height,
-        segmentFits:[...$$('.quadrant-view-switch button,.quadrant-modes button')].every(el=>el.clientWidth>=el.scrollWidth&&el.clientHeight>=44)};
+        board:$('#quadrantAddTime').getBoundingClientRect().height,filtersFit:rect('#quadrantScope').right<=innerWidth,
+        labelsFit:labels.every(el=>el.clientWidth>=el.scrollWidth&&el.getBoundingClientRect().height>=44)};
     });
-    assert(layout.scrollWidth<=width+1,JSON.stringify(layout));
-    assert.equal(layout.columns,touch?1:2);
-    assert(layout.control>=44&&layout.board>=44&&layout.segmentFits&&(!touch||layout.font>=16),JSON.stringify(layout));
-    if(envOutput&&[390,1440].includes(width))await phone.screenshot({path:path.join(envOutput,'quadrant-'+width+'.png'),animations:'disabled'});
-    await phone.locator('#quadrantAddTime').click();
+    assert(layout.scrollWidth<=width+1&&layout.matrix,JSON.stringify(layout));
+    assert(layout.control>=44&&layout.board>=44&&layout.filtersFit&&layout.labelsFit&&(!touch||layout.font>=16),JSON.stringify(layout));
+    const selectedTask=phone.locator('#quadrantMobileTasks [data-task-id="'+oldId+'"]');
+    if(touch){
+      assert(await selectedTask.isVisible());
+      const choice=key=>phone.locator('.quadrant-cell-toggle[data-quadrant-key="'+key+'"]');
+      await choice('2').tap();
+      assert.equal(await choice('2').getAttribute('aria-pressed'),'true');
+      assert(await phone.locator('#quadrantMobileTasks').getByText('暂无任务').isVisible());
+      await choice('').tap();
+      assert.equal(await phone.locator('#quadrantMobileHeading').innerText(),'未分类');
+      await choice('1').tap();
+      assert(await selectedTask.isVisible());
+      await selectedTask.getByRole('button',{name:'详情 / 分类'}).tap();
+      assert(await phone.locator('#matterImportant').isVisible());
+      await submit(phone,'取消');
+    }else{
+      assert(!(await phone.locator('#quadrantMobileTasks').isVisible()));
+      assert(await phone.locator('#quadrantGrid [data-task-id="'+oldId+'"]').isVisible());
+    }
+    if(envOutput&&[320,390,1440].includes(width)){
+      await phone.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
+      await phone.screenshot({path:path.join(envOutput,'quadrant-'+width+'.png'),animations:'disabled'});
+    }
+    if(touch){
+      await selectedTask.getByRole('button',{name:'记用时'}).tap();
+      assert.equal(await phone.locator('#timeEntryTask').inputValue(),oldId);
+    }else await phone.locator('#quadrantAddTime').click();
     const box=await phone.locator('#modalBox').boundingBox();
     assert(box.x>=0&&box.x+box.width<=width+1);
     if(envOutput&&width===390)await phone.screenshot({path:path.join(envOutput,'quadrant-record-390.png'),animations:'disabled'});
+    if(width===390){
+      await phone.setViewportSize({width,height:430});
+      await phone.waitForFunction(()=>{
+        const viewport=visualViewport,box=$('#modalBox').getBoundingClientRect();
+        const footer=$('#timeDialogForm .btns').getBoundingClientRect();
+        const scroll=$('.quadrant-dialog-scroll');
+        const modalOnTop=document.elementFromPoint(box.left+16,box.top+16)?.closest('#modalBox');
+        return modalOnTop&&box.bottom<=viewport.height&&footer.height>=44&&footer.bottom<=viewport.height&&scroll.scrollHeight>scroll.clientHeight;
+      });
+      await phone.locator('#timeEntryNote').fill('短视口下仍可填写备注');
+      assert(await phone.locator('#timeDialogForm button[type=submit]').isVisible());
+      if(envOutput)await phone.screenshot({path:path.join(envOutput,'quadrant-short-dialog-390.png'),animations:'disabled'});
+    }
     await submit(phone,'取消');
+    if(width===390){
+      await phone.setViewportSize({width,height:844});
+      await phone.evaluate(()=>{sessionPasscode=null;clearTimeout(syncTimer);});
+      const complete=selectedTask.locator('.matter-check');
+      await complete.tap();
+      assert.equal(await complete.getAttribute('aria-pressed'),'false');
+      await complete.tap();
+      assert.equal(await complete.getAttribute('aria-pressed'),'true');
+    }
     await phone.locator('#quadrantReviewTab').click();
     assert(await phone.locator('#quadrantReview').getByText('已记录 35 分钟').isVisible());
     if(envOutput&&width===390)await phone.screenshot({path:path.join(envOutput,'quadrant-review-390.png'),animations:'disabled',fullPage:true});
     await phone.context().close();
-    pass(width+'px：列数、点击范围、无横向溢出、弹窗与复盘');
+    pass(width+'px：坐标轴方位、触控范围、任务切换、弹窗与复盘');
   }
   assert.deepEqual(external,[]);
   assert.deepEqual(errors,[]);

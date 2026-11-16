@@ -12,7 +12,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#1a1a1a">
 <title>个人工作台</title>
-  <link rel="stylesheet" href="styles.css?v=review-time-quadrants-1">
+  <link rel="stylesheet" href="styles.css?v=review-time-quadrants-2">
 </head>
 <body>
 <div class="main-area" id="mainArea">
@@ -494,12 +494,12 @@
           </div>
           <div class="quadrant-filters">
             <label>查看日期<input id="quadrantDay" type="date" required></label>
-            <label id="quadrantScopeLabel">看板范围<select id="quadrantScope">
-              <option value="day">所选日期</option>
-              <option value="unscheduled">未安排日期</option>
-              <option value="all">全部待办</option>
-            </select></label>
             <button type="button" id="quadrantToday">今天</button>
+            <label id="quadrantScopeLabel">看板范围<select id="quadrantScope">
+              <option value="day">按日期</option>
+              <option value="unscheduled">未排期</option>
+              <option value="all">全部</option>
+            </select></label>
           </div>
           <div class="matter-tabs quadrant-modes" role="group" aria-label="四象限功能">
             <button type="button" id="quadrantBoardTab" class="on" aria-controls="quadrantBoard" aria-pressed="true">任务看板</button>
@@ -507,7 +507,14 @@
           </div>
           <div id="quadrantBoard">
             <p class="quadrant-hint" id="quadrantScopeHint"></p>
-            <div class="quadrant-grid" id="quadrantGrid"></div>
+            <div class="quadrant-grid" id="quadrantGrid" role="group" aria-label="任务矩阵，向上更重要，向右更紧急">
+              <span class="quadrant-axis-label quadrant-axis-label-y" aria-hidden="true">重要程度</span>
+              <span class="quadrant-axis-label quadrant-axis-label-x" aria-hidden="true">紧急程度</span>
+              <span class="quadrant-axis quadrant-axis-x" aria-hidden="true"></span>
+              <span class="quadrant-axis quadrant-axis-y" aria-hidden="true"></span>
+              <div id="quadrantCells"></div>
+            </div>
+            <section id="quadrantMobileTasks" class="quadrant-mobile-tasks" aria-labelledby="quadrantMobileHeading"></section>
           </div>
           <div id="quadrantReview" hidden></div>
         </section>
@@ -627,6 +634,6 @@
 <div class="modal-mask" id="modalMask"><div class="modal" id="modalBox"></div></div>
 
 
-  <script src="app.js?v=review-time-quadrants-1"></script>
+  <script src="app.js?v=review-time-quadrants-2"></script>
 </body>
 </html>

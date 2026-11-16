@@ -4357,6 +4357,27 @@ function timeBoardRow(task){
   </article>`;
 }
 
+function timeBoardItems(items,key){
+  if(items.length)return items.map(timeBoardRow).join('');
+  const empty=key?'暂无任务':'旧任务和判断尚未填全的任务显示于此。';
+  return `<p class="quadrant-empty">${empty}</p>`;
+}
+
+function timeBoardCell(items,key,selected){
+  const title=TIME_QUADRANTS[key],mark=key?'<i class="quadrant-mark" aria-hidden="true"></i>':'';
+  return `<section class="quadrant-card" data-quadrant="${key}" aria-label="${title}">
+    <button type="button" class="quadrant-cell-toggle" data-time-action="select-quadrant" data-quadrant-key="${key}"
+      aria-pressed="${key===selected}" aria-controls="quadrantMobileTasks">
+      <span class="quadrant-cell-name">${mark}${title}</span><span class="quadrant-cell-count">${items.length} 项</span>
+    </button>
+    <div class="quadrant-desktop-content">
+      <div class="quadrant-card-heading"><h3>${mark}${title}</h3><span>${items.length} 项</span></div>
+      ${timeBoardItems(items,key)}
+    </div>
+  </section>`;
+}
+
+let timeMobileQuadrant=null;
 function renderTimeBoard(data){
   const scope=$('#quadrantScope').value;
   const tasks=liveTodos().filter(task=>scope==='all'||(scope==='unscheduled'?!todoDue(task):data.related.has(task.id)));
@@ -4365,14 +4386,11 @@ function renderTimeBoard(data){
   sorted.forEach(({record})=>groups.get(timeQuadrant(record)).push(record));
   const hint={day:'日期视图包含当日计划、完成或重开，以及已记用时的任务。',unscheduled:'显示尚未安排计划日期的任务。',all:'显示所有待办。'};
   $('#quadrantScopeHint').textContent='看板使用当前分类。'+hint[scope];
-  $('#quadrantGrid').innerHTML=TIME_QUADRANT_KEYS.map(key=>{
-    const items=groups.get(key);
-    const empty=key?'暂无任务':'旧任务和判断尚未填全的任务显示于此。';
-    return `<section class="quadrant-card" data-quadrant="${key}" aria-labelledby="quadrantGroup${key||'None'}">
-      <div class="quadrant-card-heading"><h3 id="quadrantGroup${key||'None'}">${key?'<i class="quadrant-mark" aria-hidden="true"></i>':''}${TIME_QUADRANTS[key]}</h3><span>${items.length} 项</span></div>
-      ${items.length?items.map(timeBoardRow).join(''):`<p class="quadrant-empty">${empty}</p>`}
-    </section>`;
-  }).join('');
+  const selected=timeMobileQuadrant??TIME_QUADRANT_KEYS.find(key=>groups.get(key).length)??'1';
+  // Start on the upper left in reading order, with urgency increasing to the right.
+  $('#quadrantCells').innerHTML=['2','1','4','3',''].map(key=>timeBoardCell(groups.get(key),key,selected)).join('');
+  const items=groups.get(selected);
+  $('#quadrantMobileTasks').innerHTML=`<div class="quadrant-card-heading"><h3 id="quadrantMobileHeading">${TIME_QUADRANTS[selected]}</h3><span>${items.length} 项</span></div>${timeBoardItems(items,selected)}`;
 }
 
 function timeEntryKind(entry){
@@ -4420,8 +4438,8 @@ function renderTimeQuadrants(){
 
 function timeDialog(title,fields,submit,extra=''){
   const opener=document.activeElement;
-  modal(`<div id="timeDialogContent" role="dialog" aria-modal="true" aria-labelledby="timeDialogTitle"><h4 id="timeDialogTitle">${title}<button type="button" class="modal-close" id="timeDialogClose" aria-label="关闭">×</button></h4>
-    <form id="timeDialogForm">${fields}<p id="timeDialogError" class="matter-error" role="alert"></p>
+  modal(`<div id="timeDialogContent" role="dialog" aria-modal="true" aria-labelledby="timeDialogTitle"><h4 id="timeDialogTitle" tabindex="-1">${title}<button type="button" class="modal-close" id="timeDialogClose" aria-label="关闭">×</button></h4>
+    <form id="timeDialogForm"><div class="quadrant-dialog-scroll">${fields}<p id="timeDialogError" class="matter-error" role="alert"></p></div>
     <div class="btns">${extra}<button type="button" class="cancel" id="timeDialogCancel">取消</button><button type="submit" class="ok">${submit}</button></div></form></div>`,{noMaskClose:true});
   $('#modalBox').classList.add('matter-dialog','quadrant-dialog');
   const finish=()=>{
@@ -4442,7 +4460,8 @@ function timeDialog(title,fields,submit,extra=''){
       event.preventDefault();(event.shiftKey?last:first).focus();
     }
   });
-  $('#timeDialogForm').querySelector('input,select,textarea')?.focus();
+  if(matchMedia('(max-width:759px),(pointer:coarse)').matches)$('#timeDialogTitle').focus({preventScroll:true});
+  else $('#timeDialogForm').querySelector('input,select,textarea')?.focus();
   return finish;
 }
 
@@ -4638,11 +4657,24 @@ $('#quadrantView').addEventListener('click',event=>{
   const button=event.target.closest('[data-time-action]');if(!button)return;
   const taskId=button.closest('[data-task-id]')?.dataset.taskId;
   switch(button.dataset.timeAction){
-    case 'detail':openMatter('todo',taskId);break;
+    case 'select-quadrant':{
+      timeMobileQuadrant=button.dataset.quadrantKey;
+      renderTimeQuadrants();
+      $('.quadrant-cell-toggle[aria-pressed=true]')?.focus({preventScroll:true});
+      // Reveal the list below the matrix after a touch, while retaining the selected button.
+      const panelTop=$('#quadrantMobileTasks').getBoundingClientRect().top;
+      if(event.detail&&panelTop>innerHeight-148)window.scrollBy({top:panelTop-innerHeight+148,behavior:'instant'});
+      break;
+    }
+    case 'detail':
+      openMatter('todo',taskId);
+      if($('#matterEditForm'))$('#modalBox').classList.add('quadrant-task-dialog');
+      break;
     case 'toggle':{
+      const list=button.closest('#quadrantMobileTasks')||$('#quadrantGrid');
       matterToggle('todo',taskId);
-      const row=$('#quadrantGrid .quadrant-task[data-task-id="'+CSS.escape(taskId)+'"]');
-      (row?.querySelector('.matter-check')||$('#quadrantBoardTab')).focus();
+      const row=list.querySelector('.quadrant-task[data-task-id="'+CSS.escape(taskId)+'"]');
+      (row?.querySelector('.matter-check')||$('#quadrantBoardTab')).focus({preventScroll:true});
       break;
     }
     case 'log':openTimeEntry(taskId);break;
