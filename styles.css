@@ -71,6 +71,20 @@ main{flex:1;padding:16px 16px calc(var(--tab-h) + 24px)}
 .focus .f-num.ex{color:var(--expense)}
 .focus .f-num.ok{color:var(--income)}
 .focus .f-sub{font-size:12px;color:var(--text-3)}
+/* finesse · component: daily-budget disclosure · register=product · tokens: inherited */
+.focus .f-item{min-width:0}
+.focus .focus-sub-row{min-height:var(--ui-hit-size);display:flex;align-items:center;line-height:20px;color:var(--text-2)}
+.focus-budget-toggle{display:flex;align-items:center;gap:var(--ui-space-1);align-self:flex-start;max-width:100%;min-height:var(--ui-hit-size);padding:0 var(--ui-space-1);margin-left:calc(-1 * var(--ui-space-1));border-radius:var(--r-xs);font-size:var(--ui-font-caption);line-height:20px;color:var(--text-2);text-align:left;outline:2px solid transparent;outline-offset:2px;transition:none}
+.focus-budget-toggle span{min-width:0;overflow-wrap:anywhere}
+.focus-budget-toggle svg{flex:none}
+.focus-budget-toggle[aria-expanded="true"] svg{transform:rotate(180deg)}
+.focus-budget-toggle:focus-visible{outline-color:var(--text)}
+.focus-budget-toggle:active{background:var(--bg2)}
+.focus-budget-toggle:disabled{opacity:.5;cursor:not-allowed}
+@media (hover:hover){.focus-budget-toggle:hover{background:var(--card-hover);color:var(--text)}}
+.focus-budget-details{grid-column:1 / -1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--ui-space-3);padding-top:var(--ui-space-3);border-top:1px solid var(--line)}
+.focus-budget-details[hidden]{display:none}
+.focus .focus-budget-details .f-sub{color:var(--text-2);overflow-wrap:anywhere}
 .topbar-row > div:first-child{flex:1}
 .card h3{margin:0 0 12px;font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
 .card h3 .ic{width:18px;height:18px;color:var(--text);flex:none}
