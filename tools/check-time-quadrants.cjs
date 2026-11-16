@@ -88,6 +88,46 @@ async function startMock(){
   assert.deepEqual(remote.files,{},'A fresh dedicated server is required');
   assert.equal((await a.request.get(first+'/.git/config')).status(),404);
   pass('独立预览强制 Mock，仅允许本源网络，Git 元数据不可经预览服务读取');
+  const scopePage=await newPage(first,{viewport:{width:1440,height:1000}});
+  await ready(scopePage,first+view);
+  await scopePage.evaluate(day=>{
+    sessionPasscode=null;
+    clearTimeout(syncTimer);
+    const task=(text,due,important,urgent)=>newMatterTodo(text,due,{timePlan:{important,urgent}});
+    S.todos=[
+      task('有计划 A',day,false,false),
+      task('有计划 B',day,true,true),
+      task('未排期 A','',true,true),
+      task('未排期 B','',false,true),
+      newMatterTodo('较早完成','2026-11-14',{done:true,completedAt:'2026-11-14T03:00:00.000Z'})
+    ];
+    renderAll();
+  },today);
+  const scope=scopePage.locator('#quadrantScope'),boardRows=scopePage.locator('#quadrantGrid .quadrant-task');
+  assert.equal(await scope.inputValue(),'pending');
+  assert.equal(await boardRows.count(),4);
+  assert.match(await scopePage.locator('#quadrantScopeHint').textContent(),/显示 4 项未完成，其中 2 项未排期/);
+  assert.equal(await boardRows.getByText('未排期 A').evaluate(el=>el.closest('[data-quadrant]').dataset.quadrant),'1');
+  assert.equal(await boardRows.getByText('未排期 B').evaluate(el=>el.closest('[data-quadrant]').dataset.quadrant),'3');
+  if(envOutput)await scopePage.screenshot({path:path.join(envOutput,'quadrant-scope-1440.png'),animations:'disabled'});
+  await scopePage.locator('#quadrantDay').fill(yesterday);
+  assert.equal(await scope.inputValue(),'day');
+  assert.equal(await boardRows.count(),0);
+  await scopePage.locator('#quadrantToday').click();
+  assert.equal(await boardRows.count(),2);
+  await scope.selectOption('unscheduled');
+  assert.deepEqual((await boardRows.locator('.quadrant-task-title').allTextContents()).sort(),['未排期 A','未排期 B']);
+  await scope.selectOption('all');
+  assert.equal(await boardRows.count(),5);
+  await scope.selectOption('pending');
+  await scopePage.locator('#quadrantReviewTab').click();
+  await scopePage.locator('#quadrantDay').fill(yesterday);
+  await scopePage.locator('#quadrantBoardTab').click();
+  assert.equal(await scope.inputValue(),'pending');
+  assert.equal(await boardRows.count(),4);
+  await scopePage.context().close();
+  pass('默认四项未完成包含两条已分类未排期任务，各范围互通，复盘日期不改看板范围');
+
 
   await a.addInitScript(({oldId,today,testTitle})=>{
     if(!localStorage.getItem('lifeworkbench_v1')){
@@ -254,6 +294,7 @@ async function startMock(){
   pass('原 JSON 备份实际下载、旧版覆盖导入、合并补字段及新版覆盖还原通过');
 
   await c.locator('#quadrantTab').click();
+  await c.locator('#quadrantScope').selectOption('all');
   await c.locator('#quadrantGrid [data-task-id="'+oldId+'"]').getByRole('button',{name:'详情 / 分类'}).click();
   await c.evaluate(id=>{
     const current=S.todos.find(task=>task.id===id);
@@ -296,6 +337,7 @@ async function startMock(){
     const touch=width<600;
     const phone=await newPage(first,{viewport:{width,height:touch?844:1000},hasTouch:touch,isMobile:touch,deviceScaleFactor:1});
     await ready(phone,first+view);
+    await phone.locator('#quadrantToday').click();
     const layout=await phone.evaluate(()=>{
       const control=$('#quadrantDay'),rect=sel=>$(sel).getBoundingClientRect();
       const items=['2','1','4','3'].map(key=>rect('.quadrant-card[data-quadrant="'+key+'"]'));
@@ -306,9 +348,11 @@ async function startMock(){
       return {width:innerWidth,scrollWidth:document.documentElement.scrollWidth,matrix,
         control:control.getBoundingClientRect().height,font:parseFloat(getComputedStyle(control).fontSize),
         board:$('#quadrantAddTime').getBoundingClientRect().height,filtersFit:rect('#quadrantScope').right<=innerWidth,
+        axisWeight:[getComputedStyle($('.quadrant-axis-x')).borderTopWidth,getComputedStyle($('.quadrant-axis-y')).borderLeftWidth],
         labelsFit:labels.every(el=>el.clientWidth>=el.scrollWidth&&el.getBoundingClientRect().height>=44)};
     });
     assert(layout.scrollWidth<=width+1&&layout.matrix,JSON.stringify(layout));
+    assert.deepEqual(layout.axisWeight,['2px','2px']);
     assert(layout.control>=44&&layout.board>=44&&layout.filtersFit&&layout.labelsFit&&(!touch||layout.font>=16),JSON.stringify(layout));
     const selectedTask=phone.locator('#quadrantMobileTasks [data-task-id="'+oldId+'"]');
     if(touch){

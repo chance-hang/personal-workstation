@@ -12,7 +12,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#1a1a1a">
 <title>个人工作台</title>
-  <link rel="stylesheet" href="styles.css?v=review-time-quadrants-2">
+  <link rel="stylesheet" href="styles.css?v=review-time-quadrants-3">
 </head>
 <body>
 <div class="main-area" id="mainArea">
@@ -496,6 +496,7 @@
             <label>查看日期<input id="quadrantDay" type="date" required></label>
             <button type="button" id="quadrantToday">今天</button>
             <label id="quadrantScopeLabel">看板范围<select id="quadrantScope">
+              <option value="pending">未完成</option>
               <option value="day">按日期</option>
               <option value="unscheduled">未排期</option>
               <option value="all">全部</option>
@@ -634,6 +635,6 @@
 <div class="modal-mask" id="modalMask"><div class="modal" id="modalBox"></div></div>
 
 
-  <script src="app.js?v=review-time-quadrants-2"></script>
+  <script src="app.js?v=review-time-quadrants-3"></script>
 </body>
 </html>

@@ -4380,12 +4380,23 @@ function timeBoardCell(items,key,selected){
 let timeMobileQuadrant=null;
 function renderTimeBoard(data){
   const scope=$('#quadrantScope').value;
-  const tasks=liveTodos().filter(task=>scope==='all'||(scope==='unscheduled'?!todoDue(task):data.related.has(task.id)));
+  const matches={
+    pending:task=>!task.done,
+    day:task=>data.related.has(task.id),
+    unscheduled:task=>!todoDue(task),
+    all:()=>true
+  };
+  const tasks=liveTodos().filter(matches[scope]);
   const sorted=tasks.map(record=>({kind:'todo',record})).sort(matterSort);
   const groups=new Map(TIME_QUADRANT_KEYS.map(key=>[key,[]]));
   sorted.forEach(({record})=>groups.get(timeQuadrant(record)).push(record));
-  const hint={day:'日期视图包含当日计划、完成或重开，以及已记用时的任务。',unscheduled:'显示尚未安排计划日期的任务。',all:'显示所有待办。'};
-  $('#quadrantScopeHint').textContent='看板使用当前分类。'+hint[scope];
+  const hint={
+    pending:`显示 ${tasks.length} 项未完成，其中 ${tasks.filter(task=>!todoDue(task)).length} 项未排期。`,
+    day:`显示 ${tasks.length} 项，含所选日计划、完成、重开或已记用时的任务。`,
+    unscheduled:`显示 ${tasks.length} 项未排期待办。`,
+    all:`显示全部 ${tasks.length} 项待办。`
+  };
+  $('#quadrantScopeHint').textContent=hint[scope]+'看板按当前分类排列。';
   const selected=timeMobileQuadrant??TIME_QUADRANT_KEYS.find(key=>groups.get(key).length)??'1';
   // Start on the upper left in reading order, with urgency increasing to the right.
   $('#quadrantCells').innerHTML=['2','1','4','3',''].map(key=>timeBoardCell(groups.get(key),key,selected)).join('');
@@ -4648,9 +4659,13 @@ $('#matterListTab').onclick=()=>setTimeQuadrantView(false);
 $('#quadrantTab').onclick=()=>setTimeQuadrantView(true);
 $('#quadrantBoardTab').onclick=()=>timeSetMode(false);
 $('#quadrantReviewTab').onclick=()=>timeSetMode(true);
-$('#quadrantDay').onchange=renderTimeQuadrants;
+function selectTimeDay(){
+  if($('#quadrantReview').hidden)$('#quadrantScope').value='day';
+  renderTimeQuadrants();
+}
+$('#quadrantDay').onchange=selectTimeDay;
 $('#quadrantScope').onchange=renderTimeQuadrants;
-$('#quadrantToday').onclick=()=>{$('#quadrantDay').value=todayStr();renderTimeQuadrants();};
+$('#quadrantToday').onclick=()=>{$('#quadrantDay').value=todayStr();selectTimeDay();};
 $('#quadrantAddTime').onclick=()=>openTimeEntry();
 $('#quadrantExport').onclick=openTimeExport;
 $('#quadrantView').addEventListener('click',event=>{
