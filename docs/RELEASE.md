@@ -1,5 +1,21 @@
 # RELEASE
 
+## 2026-11-16 发布清单：四象限时间管理 v3.25.0
+
+状态：`P0 · Release Ready`。用户已查看多轮预览，明确授权「自己审计一下，核查一下，没有问题就升级到正式库」。审计、发布和上线核验在本轮完成；本节为当前授权，不将下方旧任务的业务验收状态自动改为通过。
+
+- 正式基线与回滚参照：`22d7a41417ebf8c8241c2f025c43deebc599921b`，已 fetch 并通过 GitHub API 核对。
+- 已接受 Source：`review/time-quadrants` `084678fc67f88c2c0277f8c2aead9b2246b258b2`。
+- 发布分支：`release/time-quadrants-v3.25.0`；目标 `main`。
+- 范围：Source 的 app.js、index.html、styles.css、tools/mock-sync-server.mjs、tools/check-time-quadrants.cjs、docs/TIME_QUADRANTS_ACCEPTANCE.md。发布准备额外允许更新日志/资源缓存、tools/check-prod-time-quadrants.cjs、ACTIVE_TASK / RELEASE / RELEASE_HISTORY 和本轮审计文档。
+- 保留正式登录、localStorage/IndexedDB 路径、Gist/加密协议及导入导出外层格式。新分类、用时和复盘字段按授权进入现有保存、同步和备份流程。番茄自动累计仍为第二阶段。
+- 使用独立发布目录和临时浏览器；功能专项端口 4188，发布联合检查端口 4191；不操作用户 4187 预览和其他已有服务，不访问真实账户或 Gist。
+- 完整历史 bundle `../prod-rollback-quadrants-22d7a41.bundle` 已验证可读。回滚须新提交，不强推，不自动回滚业务数据。
+- 发布前审计通过：27 组功能专项 + 92 组联合发布检查，共 119 组；证据见 docs/RELEASE_AUDIT_V3_25.md。
+- 真实账户跨设备与 iOS 真机验收仍待用户实践，不据模拟检查补记通过。
+
+---
+
 ## 2026-11-16 日预算与备忘安排修复 v3.24.0
 
 用户在本聊天明确授权审计通过后更新两个功能到正式库。
