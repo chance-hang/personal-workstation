@@ -1312,12 +1312,15 @@ summary::-webkit-details-marker{color:var(--text)}
 .quadrant-axis-label-x{grid-area:3/3;justify-self:end;padding-top:4px}
 .quadrant-axis{position:relative;pointer-events:none;color:var(--quadrant-axis-rule)}
 .quadrant-axis::before{content:"";position:absolute;background:currentColor}
-.quadrant-axis svg{position:absolute;display:block;width:12px;height:12px;fill:currentColor}
+.quadrant-axis svg{
+  position:absolute;display:block;width:12px;height:12px;fill:none;
+  stroke:currentColor;stroke-width:var(--quadrant-axis-weight);stroke-linecap:round;stroke-linejoin:round
+}
 .quadrant-axis-x{grid-area:3/1/4/-1;align-self:center;height:12px}
-.quadrant-axis-x::before{left:0;right:8px;top:calc(50% - var(--quadrant-axis-weight)/2);height:var(--quadrant-axis-weight)}
+.quadrant-axis-x::before{left:0;right:0;top:calc(50% - var(--quadrant-axis-weight)/2);height:var(--quadrant-axis-weight)}
 .quadrant-axis-x svg{right:0;top:0}
 .quadrant-axis-y{grid-area:2/2/5/3;justify-self:center;width:12px}
-.quadrant-axis-y::before{top:8px;bottom:0;left:calc(50% - var(--quadrant-axis-weight)/2);width:var(--quadrant-axis-weight)}
+.quadrant-axis-y::before{top:0;bottom:0;left:calc(50% - var(--quadrant-axis-weight)/2);width:var(--quadrant-axis-weight)}
 .quadrant-axis-y svg{top:0;left:0}
 .quadrant-mobile-tasks,.quadrant-workbench .quadrant-cell-toggle{display:none}
 .modal-mask:has(.quadrant-dialog,.quadrant-task-dialog){z-index:81}

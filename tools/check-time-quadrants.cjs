@@ -62,7 +62,11 @@ async function assertCenteredAxes(page){
     const rect=selector=>document.querySelector(selector).getBoundingClientRect();
     const cards=['2','1','4','3'].map(key=>rect('.quadrant-card[data-quadrant="'+key+'"]'));
     const x=rect('.quadrant-axis-x'),y=rect('.quadrant-axis-y');
+    const lineStyle=axis=>getComputedStyle(document.querySelector('.quadrant-axis-'+axis),'::before');
+    const arrowStyle=axis=>getComputedStyle(document.querySelector('.quadrant-axis-'+axis+' path'));
+    const lineX=lineStyle('x'),lineY=lineStyle('y');
     const arrowX=rect('.quadrant-axis-x path'),arrowY=rect('.quadrant-axis-y path');
+    const arrowStrokeX=parseFloat(arrowStyle('x').strokeWidth)/2,arrowStrokeY=parseFloat(arrowStyle('y').strokeWidth)/2;
     const labelX=rect('.quadrant-axis-label-x'),labelY=rect('.quadrant-axis-label-y');
     const near=(a,b)=>Math.abs(a-b)<.1;
     const centerX=(cards[0].left+cards[1].right)/2,centerY=(cards[0].top+cards[2].bottom)/2;
@@ -70,8 +74,11 @@ async function assertCenteredAxes(page){
       equalCards:cards.every(card=>near(card.width,cards[0].width)&&near(card.height,cards[0].height)),
       centered:near((x.top+x.bottom)/2,centerY)&&near((y.left+y.right)/2,centerX),
       arrowsCentered:near((arrowX.top+arrowX.bottom)/2,centerY)&&near((arrowY.left+arrowY.right)/2,centerX),
-      endpointsAligned:near(x.left,cards[0].left)&&near(arrowX.right,cards[1].right)&&
-        near(arrowY.top,cards[0].top)&&near(y.bottom,cards[2].bottom),
+      equalHalfAxes:near(centerX-x.left-parseFloat(lineX.left),x.right-parseFloat(lineX.right)-centerX)&&
+        near(centerY-y.top-parseFloat(lineY.top),y.bottom-parseFloat(lineY.bottom)-centerY),
+      endpointsAligned:near(x.left,cards[0].left)&&near(arrowX.right+arrowStrokeX,cards[1].right)&&
+        near(arrowY.top-arrowStrokeY,cards[0].top)&&near(y.bottom,cards[2].bottom),
+      openArrowheads:arrowStyle('x').fill==='none'&&arrowStyle('y').fill==='none',
       labelsClear:labelY.bottom<arrowY.top&&labelX.bottom<arrowX.top,
       noOverflow:document.documentElement.scrollWidth<=innerWidth+1,
       visibleRows:[...document.querySelectorAll('#quadrantGrid .quadrant-task')].filter(row=>row.offsetWidth).every(row=>{
@@ -178,7 +185,7 @@ async function startMock(){
     }
     await axisPage.context().close();
   }
-  pass('空任务、上下数量不均、长标题及 1/1.25/1.5/2 像素密度：四格等大、交点居中、两轴端点对齐、标签不重叠');
+  pass('空任务、上下数量不均、长标题及 1/1.25/1.5/2 像素密度：四格等大、交点居中、正负轴段等长、两轴端点对齐、标签不重叠');
 
 
   await a.addInitScript(({oldId,today,testTitle})=>{
