@@ -1215,6 +1215,8 @@ summary::-webkit-details-marker{color:var(--text)}
 [data-module="todos"] .todo-prog-row{font-size:var(--ui-font-caption);gap:var(--ui-space-2);flex-wrap:wrap}
 [data-module="todos"] .matter-group-heading,.matters-workbench .matter-group-heading{font-size:var(--ui-font-caption);font-weight:500;color:var(--text-2);display:flex;align-items:center;gap:var(--ui-space-2);margin:var(--ui-space-4) 0 0;padding:var(--ui-space-2) 0;border-bottom:1px solid var(--line-soft)}
 .matter-group-heading span{font-size:var(--ui-font-micro);font-weight:400;font-variant-numeric:tabular-nums}
+.matter-progress{display:flex;align-items:center;gap:var(--ui-space-2);margin-top:var(--ui-space-1);color:var(--text-2);font-size:var(--ui-font-caption);font-variant-numeric:tabular-nums}
+.matter-progress progress{inline-size:clamp(48px,32%,112px);block-size:5px;accent-color:var(--text-2)}
 .modal.matter-dialog{width:min(680px,100%);max-width:680px;max-height:calc(100dvh - 48px);overflow-y:auto;overscroll-behavior:contain;scroll-padding:var(--ui-space-4);min-width:0}
 .matter-dialog h4{margin-bottom:var(--ui-space-3);font-size:var(--ui-font-heading);font-weight:var(--ui-weight-heading)}.matter-dialog .modal-close{height:var(--ui-hit-size);width:var(--ui-hit-size);right:-10px}
 .matter-detail-meta{font-size:var(--ui-font-caption);line-height:1.8;color:var(--text-2);margin-bottom:var(--ui-space-4);overflow-wrap:anywhere}

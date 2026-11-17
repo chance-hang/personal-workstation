@@ -20,9 +20,9 @@ for(const [name,start,end] of [
  const part=s=>s.slice(s.indexOf(start),end?s.indexOf(end,s.indexOf(start)):s.length);
  assert(original.includes(start)&&source.includes(start));assert.equal(part(source),part(original),name);
 }
-const existingCss=fs.readFileSync('styles.css','utf8').replace(/\r\n/g,'\n').replace(/^.*\[data-home-todo-toggle\].*\n/gm,'');
+const existingCss=fs.readFileSync('styles.css','utf8').replace(/\r\n/g,'\n').replace(/^(?:.*\[data-home-todo-toggle\]|\.matter-progress).*\n/gm,'');
 assert.equal(existingCss,execFileSync('git',['show',baseline+':styles.css'],{encoding:'utf8'}).replace(/\r\n/g,'\n'));
-pass('protected source and CSS outside the home disclosure match the production baseline');
+pass('protected source and CSS outside the new task controls match the production baseline');
 (async()=>{
  await fetch(base+'/__mock_gists/local-mock',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:{'data.json':{content:null}}})});
  browser=await chromium.launch({headless:true,executablePath:process.env.QUADRANT_BROWSER});const errors=[],external=[];
