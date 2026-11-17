@@ -12,7 +12,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#1a1a1a">
 <title>个人工作台</title>
-  <link rel="stylesheet" href="styles.css?v=prod-amount-privacy-20261117-1">
+  <link rel="stylesheet" href="styles.css?v=review-matter-categories-1">
 </head>
 <body>
 <div class="main-area" id="mainArea">
@@ -171,7 +171,7 @@
             <input id="todoIn" aria-label="待办内容" placeholder="记下需要做的事…" maxlength="200">
             <button id="todoAdd"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>添加</button>
           </div>
-          <div class="matter-quick-date"><label>计划完成<input type="date" id="todoDueDate"></label><label>时间（选填）<input type="time" id="todoDueTime"></label><button type="button" id="todoNoDue" title="清除计划日期与时间">清除</button></div>
+          <div class="matter-quick-date"><label>计划完成<input type="date" id="todoDueDate"></label><label>时间（选填）<input type="time" id="todoDueTime"></label><label>事项类型<select id="todoCategory"><option value="">未设置类型</option></select></label><button type="button" id="todoNoDue" title="清除计划日期与时间">清除</button></div>
           <div class="todo-prog-row"><span id="todoProgTxt">0 / 0</span><span id="todoPct">0%</span></div>
           <div class="todo-prog"><i id="todoBar" style="width:0"></i></div>
           <div id="todoList"></div>
@@ -478,7 +478,7 @@
           <form id="matterCapture" class="matter-capture">
             <label for="memoIn" class="matter-label">随手记录</label>
             <textarea id="memoIn" placeholder="写下想法、资料，或需要完成的事情…" maxlength="10000" rows="3"></textarea>
-            <div class="matter-capture-controls"><label>类型<select id="matterCaptureKind"><option value="note">备忘 · 先记下来</option><option value="todo">待办 · 需要完成</option></select></label><label id="matterCaptureDateWrap" hidden>计划完成<input id="matterCaptureDate" type="date"></label><label id="matterCaptureTimeWrap" hidden>时间（选填）<input id="matterCaptureTime" type="time"></label><button id="noteAdd" type="submit" class="matter-primary">保存备忘</button></div>
+            <div class="matter-capture-controls"><label>记录为<select id="matterCaptureKind"><option value="note">备忘 · 先记下来</option><option value="todo">待办 · 需要完成</option></select></label><label>事项类型<select id="matterCaptureCategory"><option value="">未设置类型</option></select></label><label id="matterCaptureDateWrap" hidden>计划完成<input id="matterCaptureDate" type="date"></label><label id="matterCaptureTimeWrap" hidden>时间（选填）<input id="matterCaptureTime" type="time"></label><button id="noteAdd" type="submit" class="matter-primary">保存备忘</button></div>
             <p class="matter-hint"><span class="matter-keyboard-hint">Ctrl / ⌘ + Enter 保存 · </span>备忘可关联待办，完成后保留结果与交付物。</p>
           </form>
           <div class="matter-tabs" id="matterViews" role="group" aria-label="事项视图"><button type="button" data-view="pending" class="on" aria-pressed="true">未完成</button><button type="button" data-view="today">今日</button><button type="button" data-view="notes">备忘</button><button type="button" data-view="completed">已完成</button><button type="button" data-view="all">全部</button></div>
@@ -509,6 +509,7 @@
               <option value="unscheduled">未排期</option>
               <option value="all">全部</option>
             </select></label>
+            <label id="quadrantCategoryLabel">事项类型<select id="quadrantCategory"><option value="all">全部类型</option><option value="">未设置类型</option></select></label>
           </div>
           <div class="matter-tabs quadrant-modes" role="group" aria-label="四象限功能">
             <button type="button" id="quadrantBoardTab" class="on" aria-controls="quadrantBoard" aria-pressed="true">任务看板</button>
@@ -647,6 +648,6 @@
 <div class="modal-mask" id="modalMask"><div class="modal" id="modalBox"></div></div>
 
 
-  <script src="app.js?v=prod-amount-privacy-20261117-1"></script>
+  <script src="app.js?v=review-matter-categories-1"></script>
 </body>
 </html>

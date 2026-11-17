@@ -3268,7 +3268,7 @@ function addTodo(){
   const v=$('#todoIn').value.trim();if(!v)return;
   const date=$('#todoDueDate').value,time=$('#todoDueTime').value;
   if(time&&!date){toast('请先选择计划日期，或清除时间');return}
-  S.todos.push(newMatterTodo(v,date+(date&&time?'T'+time:'')));
+  S.todos.push(newMatterTodo(v,date+(date&&time?'T'+time:''),{matterCategory:$('#todoCategory').value}));
   $('#todoIn').value='';persist();refreshMatters();toast('待办已添加');
 }
 
@@ -4331,6 +4331,16 @@ function matterTodayStats(t=todayStr()){
 function matterInToday(x,t=todayStr()){
   return x.done?todoCompletedDay(x)===t:!!todoDue(x)&&todoDue(x).slice(0,10)<=t;
 }
+const MATTER_CATEGORIES=Object.freeze({work:'工作',leisure:'娱乐',study:'学习',life:'生活'});
+function matterCategoryOf(record){
+  const value=record?.matterCategory;
+  return Object.hasOwn(MATTER_CATEGORIES,value)?value:'';
+}
+function matterCategoryOptions(selected=''){
+  return Object.entries(MATTER_CATEGORIES).map(([value,label])=>
+    '<option value="'+value+'"'+(value===selected?' selected':'')+'>'+label+'</option>').join('');
+}
+for(const id of ['todoCategory','matterCaptureCategory','quadrantCategory'])$('#'+id).insertAdjacentHTML('beforeend',matterCategoryOptions());
 function newMatterTodo(text,dueAt='',extra={}){
   const now=noteTime();return {id:uid(),text,done:false,date:todayStr(),createdAt:now,updatedAt:now,dueAt,completedAt:null,completionNote:'',deliverables:[],...extra};
 }
@@ -4372,7 +4382,7 @@ function matterRow({kind,record:x}){
   return `<article class="matter-row ${x.done?'is-done':''}" data-kind="${kind}" data-id="${esc(x.id)}">
     <button type="button" class="matter-check" data-action="toggle" aria-label="${x.done?'重新打开':kind==='todo'?'完成待办':'归档备忘'}" aria-pressed="${!!x.done}"><span class="matter-check-mark" aria-hidden="true">${x.done?'<svg viewBox="0 0 16 16" fill="none"><path d="m4 8 2.5 2.5L12 5"/></svg>':kind==='note'?'<svg viewBox="0 0 16 16" fill="none"><path d="M5 5.5h6M5 8h6M5 10.5h4"/></svg>':''}</span></button>
     <div class="matter-row-body"><div class="matter-row-title"><b>${esc(title)}</b><span class="matter-badge ${kind==='todo'&&matterIsOverdue(x)?'overdue':''}">${status}</span></div>
-    ${body?`<p class="matter-excerpt">${esc(body)}</p>`:''}<div class="matter-row-meta"><span>${esc(stamp)}</span>${kind==='todo'&&x.timePlan?`<span>${TIME_QUADRANTS[timeQuadrant(x)]}</span>`:''}${source?'<span>来自备忘</span>':''}${linked?'<span>已关联待办</span>':''}${matterReferences(x).length?`<span>交付物 ${matterReferences(x).length}</span>`:''}</div>
+    ${body?`<p class="matter-excerpt">${esc(body)}</p>`:''}<div class="matter-row-meta"><span>${esc(stamp)}</span>${matterCategoryOf(x)?`<span>${MATTER_CATEGORIES[matterCategoryOf(x)]}</span>`:''}${kind==='todo'&&x.timePlan?`<span>${TIME_QUADRANTS[timeQuadrant(x)]}</span>`:''}${source?'<span>来自备忘</span>':''}${linked?'<span>已关联待办</span>':''}${matterReferences(x).length?`<span>交付物 ${matterReferences(x).length}</span>`:''}</div>
     ${x.completionNote?`<p class="matter-result-note">结果：${esc(x.completionNote)}</p>`:''}
     <div class="matter-row-actions"><button type="button" data-action="edit">详情</button>${kind==='note'?`<button type="button" data-action="convert">${linked?'查看待办':'安排为待办'}</button>`:''}<button type="button" data-action="delete">删除</button></div></div></article>`;
 }
@@ -4517,6 +4527,7 @@ function timeSetMode(review){
   $('#quadrantBoard').hidden=review;
   $('#quadrantReview').hidden=!review;
   $('#quadrantScopeLabel').hidden=review;
+  $('#quadrantCategoryLabel').hidden=review;
   timeSetPressed($('#quadrantBoardTab'),!review);
   timeSetPressed($('#quadrantReviewTab'),review);
   renderTimeQuadrants();
@@ -4555,7 +4566,7 @@ function timeBoardRow({task,followup=false}){
       <span class="matter-check-mark" aria-hidden="true">${task.done?'<svg viewBox="0 0 16 16" fill="none"><path d="m4 8 2.5 2.5L12 5"/></svg>':''}</span>
     </button>
     <div class="quadrant-task-content"><div class="quadrant-task-title">${esc(task.text)}</div>
-      <div class="quadrant-meta"><span class="${followup||overdue?'quadrant-task-alert':''}">${status}</span>${due?' · 计划 '+esc(due):''}${minutes?' · 计划用时 '+minutes+' 分钟':''}${original}</div>
+      <div class="quadrant-meta"><span class="${followup||overdue?'quadrant-task-alert':''}">${status}</span>${matterCategoryOf(task)?' · '+MATTER_CATEGORIES[matterCategoryOf(task)]:''}${due?' · 计划 '+esc(due):''}${minutes?' · 计划用时 '+minutes+' 分钟':''}${original}</div>
       <div class="quadrant-task-actions"><button type="button" data-time-action="detail">详情 / 分类</button><button type="button" data-time-action="log">记用时</button></div>
     </div>
   </article>`;
@@ -4606,16 +4617,16 @@ function timeBoardCell(items,key,selected){
 }
 
 function renderTimeBoard(day,data,today){
-  const scope=$('#quadrantScope').value;
+  const scope=$('#quadrantScope').value,category=$('#quadrantCategory').value;
   const boardDay=scope==='pending'?today:day;
-  const filterKey=scope+':'+(scope==='day'||scope==='pending'?boardDay:'');
+  const filterKey=scope+':'+category+':'+(scope==='day'||scope==='pending'?boardDay:'');
   if(filterKey!==timeBoardFilter){
     timeBoardFilter=filterKey;
     timeBoardPages.clear();
     timeSelectedQuadrant=null;
     timeExpandedQuadrant=null;
   }
-  const source=liveTodos();
+  const source=liveTodos().filter(task=>category==='all'||matterCategoryOf(task)===category);
   const followups=scope==='day'||scope==='pending'?timeBoardFollowups(source,boardDay,today):new Set();
   const matches={
     pending:task=>!task.done,
@@ -4918,6 +4929,7 @@ function selectTimeDay(){
 }
 $('#quadrantDay').onchange=selectTimeDay;
 $('#quadrantScope').onchange=renderTimeQuadrants;
+$('#quadrantCategory').onchange=renderTimeQuadrants;
 $('#quadrantToday').onclick=()=>{$('#quadrantDay').value=todayStr();selectTimeDay();};
 $('#quadrantAddTime').onclick=()=>openTimeEntry();
 $('#quadrantExport').onclick=openTimeExport;
@@ -5053,8 +5065,9 @@ function addNote(){
   const text=$('#memoIn').value.trim();if(!text)return;
   const kind=$('#matterCaptureKind').value,date=$('#matterCaptureDate').value,time=$('#matterCaptureTime').value;
   if(kind==='todo'&&time&&!date){toast('请先选择计划日期，或清除时间');return}
-  const record=kind==='todo'?newMatterTodo(noteTitle(text),date+(date&&time?'T'+time:''),{details:text}):
-    {id:uid(),title:noteTitle(text),content:text,done:false,createdAt:noteTime(),updatedAt:noteTime()};
+  const matterCategory=$('#matterCaptureCategory').value;
+  const record=kind==='todo'?newMatterTodo(noteTitle(text),date+(date&&time?'T'+time:''),{details:text,matterCategory}):
+    {id:uid(),title:noteTitle(text),content:text,done:false,createdAt:noteTime(),updatedAt:noteTime(),matterCategory};
   (kind==='todo'?S.todos:S.notes).push(record);
   matterView=kind==='todo'?'pending':'notes';matterPage=1;
   $('#memoIn').value='';persist();refreshMatters(record.id);toast(kind==='todo'?'待办已保存':'备忘已保存');
@@ -5078,7 +5091,7 @@ function matterConvert(id){
   const taskId='note-task:'+id,old=S.todos.find(t=>t.id===taskId);
   let draft;
   if(old?.deletedAt&&old.sourceNoteId===id){draft=structuredClone(old);draft.deletedAt=null;draft.dueAt=todayStr();matterSetDone(draft,false)}
-  else draft=newMatterTodo(n.title||noteTitle(n.content),todayStr(),{id:old?taskId+'-'+uid():taskId,details:n.content||'',sourceNoteId:id});
+  else draft=newMatterTodo(n.title||noteTitle(n.content),todayStr(),{id:old?taskId+'-'+uid():taskId,details:n.content||'',sourceNoteId:id,matterCategory:matterCategoryOf(n)});
   // 先编辑草稿，确认后才写入；取消不会新增或恢复待办。
   openMatter('todo',draft.id,{draft,reveal:true});
 }
@@ -5096,13 +5109,14 @@ function revealArrangedMatter(task){
 function openMatter(kind,id,options={}){
   const x=options.draft||(kind==='todo'?liveTodos():liveNotes()).find(x=>x.id===id);if(!x)return;
   const todo=kind==='todo',source=todo?matterSource(x):null,due=todo?todoDue(x):'';
-  const initialPlan=todo?timePlanOf(x):null;
+  const initialPlan=todo?timePlanOf(x):null,initialCategory=matterCategoryOf(x);
   const linkable=todo?liveNotes().filter(n=>n.id===x.sourceNoteId||!liveTodos().some(t=>t.id!==id&&t.sourceNoteId===n.id)):[];
   const linked=!todo?liveTodos().find(t=>t.sourceNoteId===id):null;
   modal(`<h4>${options.draft?'安排为待办':todo?'待办详情':'备忘详情'}<button type="button" class="modal-close" id="matterClose" aria-label="关闭">×</button></h4>
     <form id="matterEditForm"><div class="matter-detail-meta">记录：${esc(matterTimeLabel(x.createdAt||(!todo?x.updatedAt:'')))}${todo&&!x.createdAt&&x.date?` · 原记录日期 ${esc(x.date)}`:''}<br>${todo?`实际完成：${x.done?(x.completedAt?esc(matterTimeLabel(x.completedAt)):'完成时间未记录'):'尚未完成'}`:'备忘可以归档，也可以关联为待办。'}</div>
     ${todo?`<label class="matter-field">事项名称<input id="matterTitle" required maxlength="200" value="${esc(x.text||'')}"></label>`:''}
     <label class="matter-field">${todo?'事项说明':'备忘正文'}<textarea id="matterBody" rows="4" maxlength="10000" ${todo?'':'required'}>${esc(todo?x.details||'':x.content||x.title||'')}</textarea></label>
+    <label class="matter-field">事项类型<select id="matterEditCategory"><option value="">未设置类型</option>${matterCategoryOptions(initialCategory)}</select></label>
     ${todo?`<label class="matter-field">关联备忘（选填）<select id="matterLinkedNote"><option value="">不关联</option>${linkable.map(n=>`<option value="${esc(n.id)}" ${n.id===x.sourceNoteId?'selected':''}>${esc(n.title||noteTitle(n.content))}</option>`).join('')}</select></label>`:''}
     ${source?`<details class="matter-source"><summary>关联的原备忘：${esc(source.title||noteTitle(source.content))}</summary><p>${esc(source.content||'')}</p><button type="button" id="matterSourceOpen">编辑原备忘</button></details>`:''}
     ${todo?`<div class="matter-date-fields"><label class="matter-field">计划完成日期<input id="matterDueDate" type="date" value="${esc(due.slice(0,10))}"></label><label class="matter-field">时间（选填）<input id="matterDueTime" type="time" value="${esc(due.slice(11,16))}"></label></div><div class="matter-date-shortcuts" id="matterDueShortcuts"><button type="button" data-days="0">今天</button><button type="button" data-days="1">明天</button><button type="button" data-days="week">本周</button><button type="button" data-days="none">不设时间</button></div>`:''}
@@ -5121,7 +5135,7 @@ function openMatter(kind,id,options={}){
   const snapshot=()=>[...form.querySelectorAll('input,textarea,select')].map(e=>e.value).join('\u0000');
   const original=snapshot();
   const baseSnapshot=()=>[...form.querySelectorAll('input,textarea,select')]
-    .filter(control=>!control.closest('.quadrant-plan-fields')).map(control=>control.value).join('\u0000');
+    .filter(control=>!control.closest('.quadrant-plan-fields')&&control.id!=='matterEditCategory').map(control=>control.value).join('\u0000');
   const originalBase=baseSnapshot();
   const cancel=()=>{if(snapshot()===original||confirm('放弃尚未保存的修改？'))closeModal()};
   $('#matterClose').onclick=cancel;$('#matterCancel').onclick=cancel;
@@ -5135,14 +5149,18 @@ function openMatter(kind,id,options={}){
     if(time&&!date){$('#matterEditError').textContent='请先选择计划日期，或清除时间。';return}
     const records=todo?S.todos:S.notes,index=records.findIndex(r=>r.id===id),current=records[index];
     if(!options.draft&&(!current||current.deletedAt)){$('#matterEditError').textContent='这条事项已被移除，请关闭后重新查看。';return}
-    if(todo&&!options.draft&&current&&baseSnapshot()===originalBase){
-      timeSavePlan(current,current,initialPlan);
+    const category=$('#matterEditCategory').value;
+    if(!options.draft&&current&&baseSnapshot()===originalBase){
+      if(todo)timeSavePlan(current,current,initialPlan);
+      if(category!==initialCategory){current.matterCategory=category;matterTouch(current);}
       persist();closeModal();
       if(options.reveal)revealArrangedMatter(current);else{refreshMatters();toast('事项已保存')}
       return;
     }
     if(todo){timeSavePlan(x,current||x,initialPlan);x.text=title;x.details=body;x.dueAt=date+(date&&time?'T'+time:'');x.sourceNoteId=$('#matterLinkedNote').value;matterSetDone(x,$('#matterStatus').value==='done');}
     else{x.title=title;x.content=body;x.done=$('#matterStatus').value==='done';}
+    if(options.draft||category!==initialCategory)x.matterCategory=category;
+    else if(current!==x)x.matterCategory=current.matterCategory;
     x.completionNote=$('#matterCompletionNote').value.trim();x.deliverables=$('#matterDeliverables').value.split('\n').map(s=>s.trim()).filter(Boolean);
     // 同步合并可能已替换数组中的对象，按 ID 写回当前数组，避免保存到旧引用。
     if(current&&(noteUpdatedAt(current.updatedAt)||0)>(noteUpdatedAt(x.updatedAt)||0))x.updatedAt=current.updatedAt;
