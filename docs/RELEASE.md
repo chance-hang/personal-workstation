@@ -2,12 +2,13 @@
 
 ## 2026-11-17 事项列表分页与未完成优先 v3.27.0
 
-状态：`P0 · Release Ready`。用户已授权将事项列表分页升级到正式库，待发布版复测和线上核验。
+状态：`P0 · Awaiting User Acceptance`（正式网页人工验收）。2026-11-17，v3.27.0 已推送正式 main，GitHub Pages 部署成功。
 
 - Source `review/matters-pagination` / `e8a6a56be7dae9fff02d90ad3391e2a4f3e9f351`。发布分支 `release/matters-pagination-v3.27.0`，目标 `main`。
 - 正式基线及回滚点 `a23fbed1d06b80c53731f4a0ec168c4f94b4240a`。完整回滚 bundle `../prod-rollback-matters-pagination-a23fbed.bundle` 已验证。
 - 发布范围为事项页待办优先、备忘分组、分页、转待办定位、相应样式和测试，以及更新说明、资源缓存和发布文档。数据字段、登录、同步和四象限沿用原规则。
-- 在独立浏览器中复跑事项分页、四象限专项、既有事项与正式模式回归。
+- 7 组事项分页、31 组四象限专项及 92 组发布回归通过。覆盖备忘转换定位、全量搜索、末页缩减、窄屏翻页以及正式模式行为。仅使用合成数据和临时 Chromium。
+- 发布提交 `08b06e2ed08628c7e0297f4189bbb485c2f2c16b`。[GitHub Pages 构建 44000605347](https://github.com/chance-hang/personal-workstation/actions/runs/44000605347) 成功。正式站 HTML、CSS、JS 均返回 HTTP 200，与发布提交逐字节一致。
 
 ---
 

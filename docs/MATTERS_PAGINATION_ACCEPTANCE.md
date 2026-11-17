@@ -1,6 +1,8 @@
-# 事项列表分页 · 本地验收
+# 事项列表分页 · v3.27.0
 
-状态为待验收。分支为 review/matters-pagination，基线为正式 v3.26.0 的 a23fbed。
+已于 2026-11-17 发布至正式环境。发布后人工验收从底部「事项」进入。[打开正式工作台](https://chance-hang.github.io/personal-workstation/)
+
+验收分支为 review/matters-pagination，基线为正式 v3.26.0 的 a23fbed。
 
 打开[本机模拟预览](http://127.0.0.1:4196/?mockSync=1)，点击底部「事项」进入事项列表。预览使用独立来源和模拟同步，可添加测试事项。
 

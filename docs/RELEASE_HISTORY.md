@@ -1,5 +1,13 @@
 # RELEASE HISTORY
 
+## 2026-11-17 — 事项列表分页与未完成优先（v3.27.0）
+
+用户确认发布。事项列表将「未完成」放在首位。备忘按未归档、已归档分组，五类视图每页 10 条，备忘转待办后定位到对应页。
+
+- Source `review/matters-pagination` / `e8a6a56`。发布分支 `release/matters-pagination-v3.27.0`，发布提交 `08b06e2ed08628c7e0297f4189bbb485c2f2c16b`，回滚点 `a23fbed`。
+- 7 组分页、31 组四象限专项和 92 组发布回归通过，无数据迁移。
+- [GitHub Pages 构建 44000605347](https://github.com/chance-hang/personal-workstation/actions/runs/44000605347) 成功，正式站 HTML、CSS、JS 与发布提交逐字节一致。
+
 ## 2026-11-17 — 四象限跨日跟进与分页（v3.26.0）
 
 用户确认发布，正式 main 与 GitHub Pages 已升级。「未分类」增加跨日跟进和每页 10 条的分页，电脑四象限每格预览 3 条，完整任务列表可展开。
