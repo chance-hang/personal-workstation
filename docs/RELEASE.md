@@ -1,5 +1,16 @@
 # RELEASE
 
+## 2026-11-17 事项类型与四象限筛选 v3.29.0
+
+用户已验收并确认通过发布审计后上线。来源为 `review/matter-categories` 的 `a10fe73`，发布分支为 `release/matter-categories-v3.29.0`，目标为 `main`。
+
+- 正式基线及回滚点 `5a3b2ea926af08e394ddb1d2db98e856d010df71`，完整回滚 bundle `../prod-rollback-matter-categories-5a3b2ea.bundle` 已验证。
+- 发布范围为工作、娱乐、学习、生活四种类型的录入和编辑、备忘转待办继承、四象限筛选、对应样式和版本说明。
+- 类型是待办与备忘的可选字段，旧记录按未设置类型显示。沿用登录、存储、同步协议和 JSON 备份格式，无整库迁移。
+- 发布核查覆盖类型筛选与跨日跟进、窄屏、双端模拟同步、旧记录、刷新和备份。正式模式使用空白临时浏览器验证。
+
+---
+
 ## 2026-11-17 全局金额隐私 v3.28.0
 
 用户已确认发布。来源为 `review/amount-privacy` 的 `c588e45`，发布分支为 `release/amount-privacy-v3.28.0`，目标为 `main`。
