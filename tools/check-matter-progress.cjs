@@ -56,12 +56,20 @@ async function editProgress(page,id,value){
   const continued=page.locator('#home-todo-continued-rows');
   assert.deepEqual(await page.evaluate(()=>S.todos.slice(3).map(matterProgressOf)),[0,100]);
   assert.match(await task('legacy-open').innerText(),/0%/);
+  assert.equal(await task('legacy-open').locator('.matter-badge').textContent(),'待完成');
   await task('dated').locator('[data-action=edit]').click();
   assert.equal(await page.locator('#matterProgress').inputValue(),'0');
   await page.locator('#matterProgress').fill('101');
   assert.equal(await page.locator('#matterProgress').evaluate(e=>e.validity.rangeOverflow),true);
   await page.locator('#matterProgress').fill('45');
+  assert.equal(await page.locator('#matterStatus option:checked').textContent(),'进行中');
   await page.locator('#matterSave').click();
+  assert.deepEqual(await task('dated').locator('.matter-badge').allTextContents(),['进行中']);
+  await page.evaluate(()=>openMatters('pending'));
+  assert.equal(await page.locator('#noteList [data-id=dated] .matter-badge').textContent(),'进行中');
+  await page.evaluate(()=>openMatters('completed'));
+  assert.equal(await page.locator('#noteList [data-id=dated]').count(),0);
+  await page.evaluate(()=>goTab('today'));
   assert.match(await task('dated').innerText(),/45%/);
   await editProgress(page,'undated',60);
   await editProgress(page,'future',20);
@@ -73,6 +81,7 @@ async function editProgress(page,id,value){
   await page.waitForFunction(()=>todayStr()==='2026-11-18'&&$('#home-todo-continued-rows'));
   assert.equal(await continued.locator('.matter-row').count(),3);
   assert.match(await task('dated').innerText(),/已逾期.*2026-11-17/s);
+  assert.deepEqual(await task('dated').locator('.matter-badge').allTextContents(),['进行中','已逾期']);
   assert.match(await task('future').innerText(),/2026-11-25/);
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await page.locator('nav.tabbar [data-p=notes]').click();
@@ -80,6 +89,7 @@ async function editProgress(page,id,value){
   await page.locator('#quadrantScope').selectOption('day');
   assert.equal(await page.locator('#quadrantDay').inputValue(),'2026-11-18');
   const rows=page.locator('#quadrantCells');
+  assert.match(await rows.locator('[data-task-id=dated]').first().textContent(),/进行中.*已逾期/s);
   assert.match(await rows.textContent(),/45%/);assert.match(await rows.textContent(),/60%/);assert.match(await rows.textContent(),/20%/);
   assert.equal(await page.evaluate(()=>S.todos.length),5);
   console.log('PASS local midnight updates home and date board, without copying tasks or changing due dates');
@@ -95,6 +105,7 @@ async function editProgress(page,id,value){
   assert.match(await task('dated').innerText(),/45%/);
   await editProgress(page,'dated',100);
   assert.match(await task('dated').innerText(),/100%/);
+  assert.deepEqual(await task('dated').locator('.matter-badge').allTextContents(),['已完成']);
   assert.equal(await continued.locator('[data-id=dated]').count(),0);
   assert.equal(await page.evaluate(()=>todoCompletedDay(S.todos.find(task=>task.id==='dated'))),'2026-11-18');
   await task('dated').locator('[data-action=toggle]').click();

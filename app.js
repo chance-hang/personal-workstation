@@ -4432,11 +4432,12 @@ function matterRow({kind,record:x}){
   const linked=kind==='note'?liveTodos().find(t=>t.sourceNoteId===x.id):null;
   const title=kind==='todo'?x.text:x.title||noteTitle(x.content);
   const body=kind==='todo'?x.details||source?.content||'':x.content||'';
-  const status=kind==='todo'?(x.done?'已完成':matterIsOverdue(x)?'已逾期':todoDue(x)?'待完成':'未定时间'):(x.done?'已归档':'备忘');
+  const overdue=kind==='todo'&&matterIsOverdue(x),inProgress=kind==='todo'&&!x.done&&matterStoredProgress(x)>0;
+  const status=kind==='todo'?(x.done?'已完成':inProgress?'进行中':overdue?'已逾期':todoDue(x)?'待完成':'未定时间'):(x.done?'已归档':'备忘');
   const stamp=kind==='todo'?(x.done?`完成：${x.completedAt?matterTimeLabel(x.completedAt):'时间未记录'}`:`计划：${todoDue(x).replace('T',' ')||'暂未安排'}`):`记录：${matterTimeLabel(x.createdAt||x.updatedAt)}`;
   return `<article class="matter-row ${x.done?'is-done':''}" data-kind="${kind}" data-id="${esc(x.id)}">
     <button type="button" class="matter-check" data-action="toggle" aria-label="${x.done?'重新打开':kind==='todo'?'完成待办':'归档备忘'}" aria-pressed="${!!x.done}"><span class="matter-check-mark" aria-hidden="true">${x.done?'<svg viewBox="0 0 16 16" fill="none"><path d="m4 8 2.5 2.5L12 5"/></svg>':kind==='note'?'<svg viewBox="0 0 16 16" fill="none"><path d="M5 5.5h6M5 8h6M5 10.5h4"/></svg>':''}</span></button>
-    <div class="matter-row-body"><div class="matter-row-title"><b>${esc(title)}</b><span class="matter-badge ${kind==='todo'&&matterIsOverdue(x)?'overdue':''}">${status}</span></div>
+    <div class="matter-row-body"><div class="matter-row-title"><b>${esc(title)}</b><span class="matter-badge ${overdue&&!inProgress?'overdue':''}">${status}</span>${overdue&&inProgress?'<span class="matter-badge overdue">已逾期</span>':''}</div>
     ${body?`<p class="matter-excerpt">${esc(body)}</p>`:''}<div class="matter-row-meta"><span>${esc(stamp)}</span>${matterCategoryOf(x)?`<span>${MATTER_CATEGORIES[matterCategoryOf(x)]}</span>`:''}${kind==='todo'&&x.timePlan?`<span>${TIME_QUADRANTS[timeQuadrant(x)]}</span>`:''}${source?'<span>来自备忘</span>':''}${linked?'<span>已关联待办</span>':''}${matterReferences(x).length?`<span>交付物 ${matterReferences(x).length}</span>`:''}</div>
     ${kind==='todo'?matterProgressMarkup(x):''}
     ${x.completionNote?`<p class="matter-result-note">结果：${esc(x.completionNote)}</p>`:''}
@@ -4616,14 +4617,15 @@ function timeBoardFollowups(tasks,day,today){
 function timeBoardRow({task,followup=false}){
   const due=todoDue(task).replace('T',' '),minutes=timePlanOf(task).minutes;
   const overdue=matterIsOverdue(task);
-  const status=task.done?'已完成':overdue?'已逾期':'未完成';
+  const inProgress=!task.done&&matterStoredProgress(task)>0;
+  const status=task.done?'已完成':inProgress?'进行中':overdue?'已逾期':'未完成';
   const original=followup?' <span class="quadrant-original">原象限：'+TIME_QUADRANTS[timeQuadrant(task)]+'</span>':'';
   return `<article class="quadrant-task ${task.done?'is-done':''}" data-task-id="${esc(task.id)}">
     <button type="button" class="matter-check" data-time-action="toggle" aria-label="${task.done?'重新打开':'完成'} ${esc(task.text)}" aria-pressed="${!!task.done}">
       <span class="matter-check-mark" aria-hidden="true">${task.done?'<svg viewBox="0 0 16 16" fill="none"><path d="m4 8 2.5 2.5L12 5"/></svg>':''}</span>
     </button>
     <div class="quadrant-task-content"><div class="quadrant-task-title">${esc(task.text)}</div>
-      <div class="quadrant-meta"><span class="${followup||overdue?'quadrant-task-alert':''}">${status}</span>${matterCategoryOf(task)?' · '+MATTER_CATEGORIES[matterCategoryOf(task)]:''}${due?' · 计划 '+esc(due):''}${minutes?' · 计划用时 '+minutes+' 分钟':''}${original}</div>
+      <div class="quadrant-meta"><span class="${!inProgress&&(followup||overdue)?'quadrant-task-alert':''}">${status}</span>${overdue&&inProgress?' · <span class="quadrant-task-alert">已逾期</span>':''}${matterCategoryOf(task)?' · '+MATTER_CATEGORIES[matterCategoryOf(task)]:''}${due?' · 计划 '+esc(due):''}${minutes?' · 计划用时 '+minutes+' 分钟':''}${original}</div>
       ${matterProgressMarkup(task)}
       <div class="quadrant-task-actions"><button type="button" data-time-action="detail">详情 / 分类</button><button type="button" data-time-action="log">记用时</button></div>
     </div>
@@ -5180,7 +5182,7 @@ function openMatter(kind,id,options={}){
     ${todo?`<div class="matter-date-fields"><label class="matter-field">计划完成日期<input id="matterDueDate" type="date" value="${esc(due.slice(0,10))}"></label><label class="matter-field">时间（选填）<input id="matterDueTime" type="time" value="${esc(due.slice(11,16))}"></label></div><div class="matter-date-shortcuts" id="matterDueShortcuts"><button type="button" data-days="0">今天</button><button type="button" data-days="1">明天</button><button type="button" data-days="week">本周</button><button type="button" data-days="none">不设时间</button></div>`:''}
     ${todo?timePlanMarkup(x):''}
     ${todo?`<label class="matter-field">完成进度（%）<input id="matterProgress" type="number" inputmode="numeric" min="0" max="100" step="1" required value="${initialProgress}"></label><p class="matter-hint">填 100% 即标为完成。部分完成的待办次日继续跟进。</p>`:''}
-    <label class="matter-field">状态<select id="matterStatus"><option value="pending" ${!x.done?'selected':''}>${todo?'未完成':'保留备忘'}</option><option value="done" ${x.done?'selected':''}>${todo?'已完成':'已归档'}</option></select></label>
+    <label class="matter-field">状态<select id="matterStatus"><option value="pending" ${!x.done?'selected':''}>${todo?(matterStoredProgress(x)>0?'进行中':'未完成'):'保留备忘'}</option><option value="done" ${x.done?'selected':''}>${todo?'已完成':'已归档'}</option></select></label>
     <label class="matter-field">${todo?'完成说明（选填）':'补充说明（选填）'}<textarea id="matterCompletionNote" rows="2" maxlength="10000">${esc(x.completionNote||'')}</textarea></label>
     <label class="matter-field">${todo?'交付物':'相关资料'}（选填，每行一条链接或路径）<textarea id="matterDeliverables" rows="3" maxlength="20000" placeholder="文档链接、文件路径，或交付说明">${esc(matterReferences(x).join('\n'))}</textarea></label>
     <p class="matter-hint">这里只保存引用；本机路径需在原电脑打开，文件本身不会上传。</p>
@@ -5204,7 +5206,10 @@ function openMatter(kind,id,options={}){
       if(!input.validity.valid)return;
       const progress=input.valueAsNumber;
       status.value=progress===100?'done':'pending';
-      if(progress<100)lastPartial=progress;
+      if(progress<100){
+        lastPartial=progress;
+        status.options[0].textContent=progress>0?'进行中':'未完成';
+      }
     };
     status.onchange=()=>{input.value=status.value==='done'?100:lastPartial;};
   }
