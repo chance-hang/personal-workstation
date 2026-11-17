@@ -1,5 +1,13 @@
 # RELEASE HISTORY
 
+## 2026-11-17 — 四象限坐标轴修正（v3.25.1）
+
+用户确认发布，正式 main 与 GitHub Pages 已升级。横轴与纵轴的正负两段分别等长，箭头改为线形。
+
+- Source `review/quadrant-axis-endpoints` / `89a7778`。发布分支 `release/quadrant-axes-v3.25.1`，发布提交 `3a7c47069b83f7a2bf1988251556da8d3d41cf40`，回滚点 `1f89f64`。
+- 27 组专项与正式模式冒烟通过，覆盖 11 种屏宽和 4 种像素密度。
+- [GitHub Pages 构建 43995404216](https://github.com/chance-hang/personal-workstation/actions/runs/43995404216) 成功，正式站 HTML、CSS、JS 均返回 HTTP 200，与发布提交逐字节一致。
+
 ## 2026-11-17 — 四象限时间管理（v3.25.0）
 
 用户授权自行审计后发布。119 组检查通过，正式 main 与 GitHub Pages 已升级。
