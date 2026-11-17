@@ -1,5 +1,13 @@
 # RELEASE HISTORY
 
+## 2026-11-17 — 四象限跨日跟进与分页（v3.26.0）
+
+用户确认发布，正式 main 与 GitHub Pages 已升级。「未分类」增加跨日跟进和每页 10 条的分页，电脑四象限每格预览 3 条，完整任务列表可展开。
+
+- Source `review/quadrant-followup` / `068b4fa`。发布分支 `release/quadrant-followup-v3.26.0`，发布提交 `211afe90d7784a3e213b1edd8fd3da75b3ff87d7`，回滚点 `4b68c96`。
+- 31 组四象限专项和 92 组发布回归通过。待办、象限、计划日期与历史日志沿用正式数据。
+- [GitHub Pages 构建 43998167707](https://github.com/chance-hang/personal-workstation/actions/runs/43998167707) 成功。正式站 HTML、CSS、JS 均返回 HTTP 200，逐字节匹配发布提交。
+
 ## 2026-11-17 — 四象限坐标轴修正（v3.25.1）
 
 用户确认发布，正式 main 与 GitHub Pages 已升级。横轴与纵轴的正负两段分别等长，箭头改为线形。

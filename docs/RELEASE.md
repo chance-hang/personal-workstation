@@ -2,12 +2,13 @@
 
 ## 2026-11-17 四象限跨日跟进与分页 v3.26.0
 
-状态：`P0 · Release Ready`。用户已明确授权发布。专项及集成检查通过后，快进正式 main，再核对 GitHub Pages 和实际资源。
+状态：`P0 · Awaiting User Acceptance`（正式网页人工验收）。2026-11-17，v3.26.0 已推送正式 main，GitHub Pages 部署成功。
 
 - Source `review/quadrant-followup` / `068b4fae0778f30a4b9dd80534dcc46b5891e570`。发布分支 `release/quadrant-followup-v3.26.0`，目标 `main`。
 - 正式基线及回滚点 `4b68c96b2d4205780b0ab035a447c7b143aa8418`。已验证完整回滚 bundle `../prod-rollback-quadrant-followup-4b68c96.bundle`。
 - 发布范围为已验收的看板跨日分组、分页与日期跟随，以及专项验证、v3.26.0 更新说明、资源版本和发布记录。保留待办、日志及分类的存储结构，沿用每日复盘、导出、登录与同步逻辑。
-- 预览已通过 31 组专项，发布版复跑专项与既有正式模式、事项和日预算回归。
+- 31 组四象限专项及 92 组发布回归通过。本地 Chromium 验证覆盖跨日、翻页、11 种屏宽、正式模式、既有事项和日预算。未接入真实账号或进行 iOS 真机验证。
+- 发布提交 `211afe90d7784a3e213b1edd8fd3da75b3ff87d7`。[GitHub Pages 构建 43998167707](https://github.com/chance-hang/personal-workstation/actions/runs/43998167707) 成功。正式站 HTML、CSS、JS 均返回 HTTP 200，与发布提交逐字节一致。
 
 ---
 
