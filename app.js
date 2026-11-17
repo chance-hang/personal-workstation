@@ -4817,21 +4817,33 @@ function matterRowsHtml(list,grouped=false){
   });
   return [...groups].map(([label,items])=>`<h3 class="matter-group-heading">${label}<span>${items.length} 项</span></h3>${items.map(matterRow).join('')}`).join('');
 }
-let matterView='pending',matterLimit=40,matterHomeRevealId='';
+function matterNoteRowsHtml(list){
+  const open=list.filter(({record})=>!record.done);
+  const archived=list.filter(({record})=>record.done);
+  return [['未归档',open],['已归档',archived]].map(([label,items])=>items.length?
+    `<h3 class="matter-group-heading">${label}<span>${items.length} 条</span></h3>${items.map(matterRow).join('')}`:'').join('');
+}
+const MATTER_PAGE_SIZE=10;
+let matterView='pending',matterPage=1,matterHomeRevealId='';
 function openMatters(view='pending'){
-  matterView=view;matterLimit=40;
+  matterView=view;matterPage=1;
   setTimeQuadrantView(false);
   $('#matterSearch').value='';$('#matterType').value='all';$('#matterFrom').value='';$('#matterTo').value='';
   goTab('notes');renderNotes();
 }
-function refreshMatters(){renderHeader();renderTodos();renderFocusCard();renderNotes();renderHistory();renderHeat();renderTimeQuadrants()}
-function renderNotes(){
+function refreshMatters(revealId){renderHeader();renderTodos();renderFocusCard();renderNotes(revealId);renderHistory();renderHeat();renderTimeQuadrants()}
+function renderNotes(revealId){
   const tasks=liveTodos(),notes=liveNotes();
   $('#noteCount').textContent=`${tasks.filter(x=>!x.done).length} 项待完成 · ${notes.length} 条备忘`;
   $$('#matterViews button').forEach(b=>{const on=b.dataset.view===matterView;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on))});
   const kw=$('#matterSearch').value.trim().toLowerCase(),type=$('#matterType').value,by=$('#matterDateBy').value;
   const from=$('#matterFrom').value,to=$('#matterTo').value;
-  if(from&&to&&from>to){$('#matterResult').textContent='开始日期不能晚于结束日期';$('#noteList').innerHTML='<div class="matter-empty">请调整筛选日期。</div>';return}
+  if(from&&to&&from>to){
+    $('#matterResult').textContent='开始日期不能晚于结束日期';
+    $('#noteList').innerHTML='<div class="matter-empty">请调整筛选日期。</div>';
+    $('#matterPagination').hidden=true;
+    return;
+  }
   const list=matterRecords(matterView==='notes'||type==='note').filter(({kind,record:x})=>{
     if(matterView==='today'&&(kind!=='todo'||!matterInToday(x)))return false;
     if(matterView==='pending'&&(kind!=='todo'||x.done))return false;
@@ -4845,9 +4857,22 @@ function renderNotes(){
     return !(from||to)||!!date&&(!from||date>=from)&&(!to||date<=to);
   }).sort(matterSort);
   $('#matterResult').textContent=`${({today:'今日与逾期',pending:'全部未完成',notes:'备忘',completed:'已完成',all:'全部事项'})[matterView]} · ${list.length} 条`;
-  $('#noteList').innerHTML=list.length?matterRowsHtml(list.slice(0,matterLimit),matterView==='today'||matterView==='pending'):'<div class="matter-empty"><b>这里还没有事项</b><p>在上方记下一条，或切换视图、清除筛选。</p></div>';
-  if(list.length>matterLimit)$('#noteList').insertAdjacentHTML('beforeend','<button type="button" class="matter-more" id="matterLoadMore">加载更多</button>');
-  const more=$('#matterLoadMore');if(more)more.onclick=()=>{matterLimit+=40;renderNotes()};
+  const totalPages=Math.max(1,Math.ceil(list.length/MATTER_PAGE_SIZE));
+  if(revealId){
+    const index=list.findIndex(({record})=>record.id===revealId);
+    if(index>=0)matterPage=Math.floor(index/MATTER_PAGE_SIZE)+1;
+  }
+  matterPage=Math.max(1,Math.min(matterPage,totalPages));
+  const start=(matterPage-1)*MATTER_PAGE_SIZE;
+  const pageRows=list.slice(start,start+MATTER_PAGE_SIZE);
+  $('#noteList').innerHTML=list.length?
+    (matterView==='notes'?matterNoteRowsHtml(pageRows):matterRowsHtml(pageRows,matterView==='today'||matterView==='pending')):
+    '<div class="matter-empty"><b>这里还没有事项</b><p>在上方记下一条，或切换视图、清除筛选。</p></div>';
+  $('#matterPagination').hidden=totalPages===1;
+  $('#matterPrevPage').disabled=matterPage===1;
+  $('#matterNextPage').disabled=matterPage===totalPages;
+  const pageStatus=totalPages>1?`第 ${matterPage} / ${totalPages} 页 · ${start+1}–${start+pageRows.length} 条`:'';
+  if($('#matterPageStatus').textContent!==pageStatus)$('#matterPageStatus').textContent=pageStatus;
 }
 $('#matterCapture').onsubmit=e=>{e.preventDefault();addNote()};
 $('#memoIn').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();addNote()}});
@@ -4855,9 +4880,11 @@ function addNote(){
   const text=$('#memoIn').value.trim();if(!text)return;
   const kind=$('#matterCaptureKind').value,date=$('#matterCaptureDate').value,time=$('#matterCaptureTime').value;
   if(kind==='todo'&&time&&!date){toast('请先选择计划日期，或清除时间');return}
-  if(kind==='todo')S.todos.push(newMatterTodo(noteTitle(text),date+(date&&time?'T'+time:''),{details:text}));
-  else S.notes.push({id:uid(),title:noteTitle(text),content:text,done:false,createdAt:noteTime(),updatedAt:noteTime()});
-  matterView=kind==='todo'?'pending':'notes';$('#memoIn').value='';persist();refreshMatters();toast(kind==='todo'?'待办已保存':'备忘已保存');
+  const record=kind==='todo'?newMatterTodo(noteTitle(text),date+(date&&time?'T'+time:''),{details:text}):
+    {id:uid(),title:noteTitle(text),content:text,done:false,createdAt:noteTime(),updatedAt:noteTime()};
+  (kind==='todo'?S.todos:S.notes).push(record);
+  matterView=kind==='todo'?'pending':'notes';matterPage=1;
+  $('#memoIn').value='';persist();refreshMatters(record.id);toast(kind==='todo'?'待办已保存':'备忘已保存');
 }
 function matterToggle(kind,id){
   const x=(kind==='todo'?liveTodos():liveNotes()).find(x=>x.id===id);if(!x)return;
@@ -4885,10 +4912,8 @@ function matterConvert(id){
 function editNote(id){openMatter('note',id)}
 function revealArrangedMatter(task){
   openMatters(task.done?'completed':'pending');
-  const list=liveTodos().filter(x=>!!x.done===!!task.done).map(record=>({kind:'todo',record})).sort(matterSort);
-  const index=list.findIndex(x=>x.record.id===task.id);
-  matterLimit=Math.max(40,Math.ceil((index+1)/40)*40);matterHomeRevealId=task.id;
-  refreshMatters();
+  matterHomeRevealId=task.id;
+  refreshMatters(task.id);
   const selector=`#noteList .matter-row[data-id="${CSS.escape(task.id)}"]`;
   goTab('notes',{scrollTo:selector});
   setTimeout(()=>{const row=$(selector);if(row){row.tabIndex=-1;row.focus({preventScroll:true})}},450);
@@ -4962,10 +4987,23 @@ function matterListAction(e){
   if(b.dataset.action==='convert')matterConvert(id);
 }
 $('#noteList').addEventListener('click',matterListAction);$('#todoList').addEventListener('click',matterListAction);
-$('#matterViews').onclick=e=>{const b=e.target.closest('[data-view]');if(b){matterView=b.dataset.view;matterLimit=40;renderNotes()}};
-$('#matterSearch').oninput=()=>{matterLimit=40;renderNotes()};
-['matterType','matterDateBy','matterFrom','matterTo'].forEach(id=>$('#'+id).onchange=()=>{matterLimit=40;renderNotes()});
-$('#matterReset').onclick=()=>{$('#matterSearch').value='';$('#matterType').value='all';$('#matterFrom').value='';$('#matterTo').value='';renderNotes()};
+function resetMatterPage(){
+  matterPage=1;
+  renderNotes();
+}
+function changeMatterPage(step){
+  matterPage+=step;
+  renderNotes();
+  const heading=$('#matterResult');
+  heading.focus({preventScroll:true});
+  heading.scrollIntoView({block:'start',behavior:'instant'});
+}
+$('#matterPrevPage').onclick=()=>changeMatterPage(-1);
+$('#matterNextPage').onclick=()=>changeMatterPage(1);
+$('#matterViews').onclick=e=>{const b=e.target.closest('[data-view]');if(b){matterView=b.dataset.view;resetMatterPage()}};
+$('#matterSearch').oninput=resetMatterPage;
+['matterType','matterDateBy','matterFrom','matterTo'].forEach(id=>$('#'+id).onchange=resetMatterPage);
+$('#matterReset').onclick=()=>{$('#matterSearch').value='';$('#matterType').value='all';$('#matterFrom').value='';$('#matterTo').value='';resetMatterPage()};
 $('#matterCaptureKind').onchange=()=>{const todo=$('#matterCaptureKind').value==='todo';$('#matterCapture').classList.toggle('is-todo',todo);$('#matterCaptureDateWrap').hidden=!todo;$('#matterCaptureTimeWrap').hidden=!todo;$('#noteAdd').textContent=todo?'添加待办':'保存备忘'};
 $('#todayOpenMatters').onclick=()=>openMatters('pending');
 $('#todoDueDate').value=todayStr();$('#todoNoDue').onclick=()=>{$('#todoDueDate').value='';$('#todoDueTime').value=''};

@@ -66,9 +66,11 @@ pass('six protected source regions and all CSS identical to accepted daily-budge
  pass('recent timed arrangement stays in the eight-row home preview with many existing today tasks');
  await p.evaluate(()=>{S.todos.push(...Array.from({length:55},(_,i)=>newMatterTodo('以后待办 '+i,'2026-11-01')));refreshMatters();openMatters('notes')});
  await row(2).locator('[data-action="convert"]').click();await p.locator('#matterDueDate').fill('2026-12-15');await p.locator('#matterSave').click();
- assert(await p.evaluate(()=>matterLimit>=80));assert.equal(await p.locator('#noteList [data-id="note-task:convert-2"]').count(),1);
+ assert.equal(await p.locator('#matterPageStatus').innerText(),'第 8 / 8 页 · 71–79 条');
+ assert(await p.locator('#noteList .matter-row').count()<=10);
+ assert.equal(await p.locator('#noteList [data-id="note-task:convert-2"]').count(),1);
  assert.equal(await p.locator('#todoList [data-id="note-task:convert-2"]').count(),0);
- pass('future task is revealed beyond the first 40 rows without incorrectly appearing on today home');
+ pass('future task opens its own page without overflowing the list or appearing on today home');
  await p.evaluate(()=>openMatters('notes'));await row(3).locator('[data-action="convert"]').click();
  await p.locator('#matterDueShortcuts [data-days="none"]').click();await p.locator('#matterSave').click();
  assert.equal(await p.locator('#noteList [data-id="note-task:convert-3"]').count(),1);assert.equal(await p.locator('#todoList [data-id="note-task:convert-3"]').count(),0);
@@ -98,6 +100,7 @@ pass('six protected source regions and all CSS identical to accepted daily-budge
  await second.goto(base.replace('127.0.0.1','localhost')+'/?mockSync=1');await second.waitForFunction(()=>syncActive()&&!syncBusy);
  assert(await second.evaluate(()=>liveTodos().some(x=>x.sourceNoteId==='convert-0'&&todoDue(x)===todayStr())));
  await second.evaluate(()=>openMatters('pending'));
+ await second.locator('#matterSearch').fill('完整备忘正文 0');
  assert.equal(await second.locator('#noteList [data-id="note-task:convert-0"]').count(),1);
  assert.notEqual(await second.locator('#focusTodo').innerText(),'0/0');
  pass('refresh and a second isolated origin retain the arranged date and original memo');

@@ -12,7 +12,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#1a1a1a">
 <title>个人工作台</title>
-  <link rel="stylesheet" href="styles.css?v=prod-quadrant-followup-20261117-1">
+  <link rel="stylesheet" href="styles.css?v=review-matters-pagination-1">
 </head>
 <body>
 <div class="main-area" id="mainArea">
@@ -478,11 +478,16 @@
             <div class="matter-capture-controls"><label>类型<select id="matterCaptureKind"><option value="note">备忘 · 先记下来</option><option value="todo">待办 · 需要完成</option></select></label><label id="matterCaptureDateWrap" hidden>计划完成<input id="matterCaptureDate" type="date"></label><label id="matterCaptureTimeWrap" hidden>时间（选填）<input id="matterCaptureTime" type="time"></label><button id="noteAdd" type="submit" class="matter-primary">保存备忘</button></div>
             <p class="matter-hint"><span class="matter-keyboard-hint">Ctrl / ⌘ + Enter 保存 · </span>备忘可关联待办，完成后保留结果与交付物。</p>
           </form>
-          <div class="matter-tabs" id="matterViews" role="group" aria-label="事项视图"><button type="button" data-view="today">今日</button><button type="button" data-view="pending" class="on" aria-pressed="true">未完成</button><button type="button" data-view="notes">备忘</button><button type="button" data-view="completed">已完成</button><button type="button" data-view="all">全部</button></div>
+          <div class="matter-tabs" id="matterViews" role="group" aria-label="事项视图"><button type="button" data-view="pending" class="on" aria-pressed="true">未完成</button><button type="button" data-view="today">今日</button><button type="button" data-view="notes">备忘</button><button type="button" data-view="completed">已完成</button><button type="button" data-view="all">全部</button></div>
           <label class="matter-search" for="matterSearch"><span>搜索</span><input id="matterSearch" type="search" placeholder="事项、正文、完成说明或交付物"></label>
           <details class="matter-filters"><summary>按类型与时间筛选</summary><div class="matter-filter-grid"><label>类型<select id="matterType"><option value="all">全部类型</option><option value="todo">待办</option><option value="note">备忘</option></select></label><label>时间依据<select id="matterDateBy"><option value="due">计划完成</option><option value="created">记录时间</option><option value="completed">实际完成</option></select></label><label>开始日期<input id="matterFrom" type="date"></label><label>结束日期<input id="matterTo" type="date"></label><button type="button" id="matterReset">清除筛选</button></div></details>
-          <div class="matter-list-heading"><span id="matterResult" aria-live="polite"></span><span>点“详情”补充说明与交付物</span></div>
+          <div class="matter-list-heading"><span id="matterResult" tabindex="-1" aria-live="polite"></span><span>点“详情”补充说明与交付物</span></div>
           <div id="noteList" class="matter-list"></div>
+          <div id="matterPagination" class="matter-pagination" role="group" aria-label="事项列表分页" hidden>
+            <button type="button" id="matterPrevPage" aria-controls="noteList">上一页</button>
+            <span id="matterPageStatus" class="matter-page-status" role="status"></span>
+            <button type="button" id="matterNextPage" aria-controls="noteList">下一页</button>
+          </div>
         </div>
         <section id="quadrantView" class="quadrant-workbench" aria-labelledby="quadrantHeading" hidden>
           <div class="quadrant-toolbar">
@@ -639,6 +644,6 @@
 <div class="modal-mask" id="modalMask"><div class="modal" id="modalBox"></div></div>
 
 
-  <script src="app.js?v=prod-quadrant-followup-20261117-1"></script>
+  <script src="app.js?v=review-matters-pagination-1"></script>
 </body>
 </html>
