@@ -3281,7 +3281,7 @@ function renderTodos(){
   const current=list.length?matterRowsHtml(preview,true):'<div class="matter-empty"><b>今天暂无安排</b></div>';
   const showToday=list.length>8?`<button class="matter-more" type="button" onclick="openMatters('today')">查看今日与逾期共 ${list.length} 项</button>`:'';
   $('#todoList').innerHTML=current+showToday+
-    homeTodoGroup('upcoming','即将到期',upcoming,t)+homeTodoGroup('unscheduled','未排期',unscheduled,t);
+    homeTodoGroup('upcoming','后续安排',upcoming,t)+homeTodoGroup('unscheduled','未排期',unscheduled,t);
 }
 $('#todoAdd').onclick=()=>addTodo();
 $('#todoIn').addEventListener('keydown',e=>{if(e.key==='Enter')addTodo()});
@@ -5134,7 +5134,7 @@ function revealArrangedMatter(task){
   goTab('notes',{scrollTo:selector});
   setTimeout(()=>{const row=$(selector);if(row){row.tabIndex=-1;row.focus({preventScroll:true})}},450);
   const due=todoDue(task).slice(0,10);
-  toast(task.done?'已保存，可在已完成列表查看':!due?'已加入首页未排期':due===todayStr()?'已安排到今天，首页待办已更新':`已安排到 ${due}，可在首页${due<todayStr()?'逾期未完成':'即将到期'}查看`);
+  toast(task.done?'已保存，可在已完成列表查看':!due?'已加入首页未排期':due===todayStr()?'已安排到今天，首页待办已更新':`已安排到 ${due}，可在首页${due<todayStr()?'逾期未完成':'后续安排'}查看`);
 }
 function openMatter(kind,id,options={}){
   const x=options.draft||(kind==='todo'?liveTodos():liveNotes()).find(x=>x.id===id);if(!x)return;

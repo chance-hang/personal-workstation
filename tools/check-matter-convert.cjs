@@ -71,6 +71,8 @@ pass('protected source and CSS outside the home disclosure match the production 
  assert(await p.locator('#noteList .matter-row').count()<=10);
  assert.equal(await p.locator('#noteList [data-id="note-task:convert-2"]').count(),1);
  assert.equal(await p.locator('#home-todo-upcoming-rows [data-id="note-task:convert-2"]').count(),1);
+ assert.match(await p.locator('#home-todo-upcoming-heading').textContent(),/^后续安排/);
+ assert.match(await p.locator('#toast').textContent(),/可在首页后续安排查看/);
  assert.equal(await p.locator('#focusTodo').innerText(),'0/14');
  pass('future task opens its own page and appears in upcoming without counting toward today');
  await p.evaluate(()=>openMatters('notes'));await row(3).locator('[data-action="convert"]').click();
