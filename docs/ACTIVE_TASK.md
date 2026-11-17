@@ -1,5 +1,16 @@
 # ACTIVE TASK
 
+## 2026-11-17 四象限坐标轴修正 v3.25.1
+
+状态：`P0 · Release Ready`。用户已确认发布；验证通过后推送正式 main，等待 GitHub Pages 部署与静态资源核验。
+
+- Source `review/quadrant-axis-endpoints` / `89a77784ea7fe485d718c52f70f3ea71d703e38c`。发布分支 `release/quadrant-axes-v3.25.1`，目标 `main`。
+- 正式基线及回滚点 `1f89f642af8b114f9f26e2e69e769cbffe3c59cf`。已验证完整回滚 bundle `../prod-rollback-quadrant-axes-1f89f64.bundle`。
+- 发布范围为 HTML 箭头、坐标轴样式、四象限专项验证脚本，以及 v3.25.1 更新说明和资源缓存版本。CSS 与验收版一致。登录、同步、存储和四象限业务逻辑沿用 v3.25.0。
+- 验收版的 27 组专项覆盖 11 种屏宽和 4 种像素密度。发布时在隔离 Mock 中复跑专项，并检查正式资产引用、线上构建和应用文件。实践环境验收沿用实际结果。
+
+---
+
 ## 2026-11-16 P0：受控发布四象限时间管理 v3.25.0
 
 状态：`P0 · Awaiting User Acceptance`（发布后正式网页业务验收）。用户已查看多轮预览并授权审计通过后发布。2026-11-17，正式 main 已发布 v3.25.0，GitHub Pages 部署及静态资源核验通过。下方 v3.24.0 的人工验收状态沿用原记录。
