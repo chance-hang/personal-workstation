@@ -1,5 +1,15 @@
 # ACTIVE TASK
 
+## 2026-11-17 全局金额隐私 v3.28.0
+
+用户已确认发布。来源为 `review/amount-privacy` 的 `c588e45`，发布分支为 `release/amount-privacy-v3.28.0`，目标为 `main`。
+
+- 正式基线及回滚点 `a6b507fe9cb6bf8fbc266f67290ba5cca60f8bb4`，完整回滚 bundle 已验证。
+- 发布范围为顶部隐私开关、金额与图表遮盖、报表脱敏和备份入口保护，以及缓存版本、更新说明和验收记录。开关使用独立浏览器偏好，沿用现有登录、IndexedDB、Gist 和备份格式。
+- 在独立本地 Mock 上验收开关、手机布局、跨标签页、刷新、脱敏导出和原始账目保留。验收步骤见 `docs/AMOUNT_PRIVACY_ACCEPTANCE.md`。
+
+---
+
 ## 2026-11-17 事项列表分页与未完成优先 v3.27.0
 
 状态：`P0 · Awaiting User Acceptance`（正式网页人工验收）。2026-11-17，v3.27.0 已推送正式 main，GitHub Pages 部署成功。
