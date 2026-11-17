@@ -1202,6 +1202,9 @@ summary::-webkit-details-marker{color:var(--text)}
 .matter-empty{text-align:center;padding:24px var(--ui-space-3);color:var(--text-2);font-size:var(--ui-font-body)}
 .matter-empty b{color:var(--text);font-weight:500}.matter-empty p{font-size:var(--ui-font-small);line-height:1.6;margin:var(--ui-space-2) auto 0;max-width:36em}
 .matter-more{min-height:var(--ui-hit-size);padding:10px var(--ui-space-3);font-size:var(--ui-font-small);color:var(--text-2);display:block;margin:var(--ui-space-3) auto 0;text-align:center}
+#todoList [data-home-todo-toggle]{border:1px solid var(--line);border-radius:var(--ui-control-radius);background:var(--card)}
+#todoList [data-home-todo-toggle]:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+@media(hover:hover){#todoList [data-home-todo-toggle]:hover{background:var(--card-hover)}}
 .matter-quick-date{display:grid;grid-template-columns:minmax(0,180px) minmax(0,140px) minmax(0,160px) 44px;gap:var(--ui-space-2);align-items:end;justify-content:start;margin-bottom:var(--ui-space-4);color:var(--text-2);font-size:var(--ui-font-caption)}
 .matter-quick-date label{min-width:0}.matter-quick-date :is(input,select){display:block;margin-top:6px}
 .matter-quick-date button{height:var(--ui-control-height);min-height:var(--ui-hit-size);padding:0;border:0;border-radius:var(--r-xs);color:var(--text-2);font-size:var(--ui-font-caption);white-space:nowrap}

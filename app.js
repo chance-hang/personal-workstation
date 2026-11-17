@@ -3252,6 +3252,18 @@ function renderHeader(){
 }
 
 /* ============ 今日-待办 ============ */
+const homeTodoExpanded=new Set();
+function homeTodoGroup(key,label,items,today){
+  if(!items.length)return '';
+  const preview=items.filter(({record},index)=>index<3||
+    record.id===matterHomeRevealId||matterLocalDay(record.createdAt||record.date)===today);
+  const expanded=homeTodoExpanded.has(key),extra=items.length-preview.length;
+  return `<section aria-labelledby="home-todo-${key}-heading">
+    <h3 class="matter-group-heading" id="home-todo-${key}-heading">${label}<span>${items.length} 项</span></h3>
+    <div id="home-todo-${key}-rows">${matterRowsHtml(expanded?items:preview)}</div>
+    ${extra?`<button type="button" class="matter-more" data-home-todo-toggle="${key}" aria-expanded="${expanded}" aria-controls="home-todo-${key}-rows">${expanded?'收起':'展开其余 '+extra+' 项'}</button>`:''}
+  </section>`;
+}
 function renderTodos(){
   pomoRefreshTasks();
   const t=todayStr();
@@ -3260,11 +3272,16 @@ function renderTodos(){
   $('#todoPct').textContent=total?Math.round(stats.done/total*100)+'%':'0%';
   $('#todoBar').style.width=(total?stats.done/total*100:0)+'%';
   const order=(a,b)=>Number(!b.record.done&&todoDue(b.record).slice(0,10)===t)-Number(!a.record.done&&todoDue(a.record).slice(0,10)===t)||matterSort(a,b);
-  const list=matterRecords().filter(x=>x.kind==='todo'&&matterInToday(x.record,t)).sort(order);
+  const tasks=liveTodos().map(record=>({kind:'todo',record}));
+  const list=tasks.filter(({record})=>matterInToday(record,t)).sort(order);
   const preview=list.slice(0,8),revealed=list.find(x=>x.record.id===matterHomeRevealId);
   if(revealed&&!preview.includes(revealed)){preview[preview.length-1]=revealed;preview.sort(order)}
-  $('#todoList').innerHTML=list.length?matterRowsHtml(preview,true):'<div class="matter-empty"><b>今天暂无安排</b><p>随时记下待办，也可以到“全部事项”查看未定时间的记录。</p></div>';
-  if(list.length>8)$('#todoList').insertAdjacentHTML('beforeend',`<button class="matter-more" type="button" onclick="openMatters('today')">查看全部 ${list.length} 项</button>`);
+  const upcoming=tasks.filter(({record})=>!record.done&&todoDue(record).slice(0,10)>t).sort(matterSort);
+  const unscheduled=tasks.filter(({record})=>!record.done&&!todoDue(record)).sort(matterSort);
+  const current=list.length?matterRowsHtml(preview,true):'<div class="matter-empty"><b>今天暂无安排</b></div>';
+  const showToday=list.length>8?`<button class="matter-more" type="button" onclick="openMatters('today')">查看今日与逾期共 ${list.length} 项</button>`:'';
+  $('#todoList').innerHTML=current+showToday+
+    homeTodoGroup('upcoming','即将到期',upcoming,t)+homeTodoGroup('unscheduled','未排期',unscheduled,t);
 }
 $('#todoAdd').onclick=()=>addTodo();
 $('#todoIn').addEventListener('keydown',e=>{if(e.key==='Enter')addTodo()});
@@ -3272,8 +3289,17 @@ function addTodo(){
   const v=$('#todoIn').value.trim();if(!v)return;
   const date=$('#todoDueDate').value,time=$('#todoDueTime').value;
   if(time&&!date){toast('请先选择计划日期，或清除时间');return}
-  S.todos.push(newMatterTodo(v,date+(date&&time?'T'+time:''),{matterCategory:$('#todoCategory').value}));
-  $('#todoIn').value='';persist();refreshMatters();toast('待办已添加');
+  const task=newMatterTodo(v,date+(date&&time?'T'+time:''),{matterCategory:$('#todoCategory').value});
+  S.todos.push(task);
+  matterHomeRevealId=task.id;
+  $('#todoIn').value='';persist();refreshMatters();
+  const row=$('#todoList .matter-row[data-id="'+CSS.escape(task.id)+'"]');
+  if(row){
+    row.tabIndex=-1;
+    row.focus({preventScroll:true});
+    row.scrollIntoView({block:'center'});
+  }
+  toast('待办已添加');
 }
 
 /* ============ 今日-习惯 ============ */
@@ -5108,7 +5134,7 @@ function revealArrangedMatter(task){
   goTab('notes',{scrollTo:selector});
   setTimeout(()=>{const row=$(selector);if(row){row.tabIndex=-1;row.focus({preventScroll:true})}},450);
   const due=todoDue(task).slice(0,10);
-  toast(task.done?'已保存，可在已完成列表查看':!due?'已加入未完成列表（未设计划日期）':due===todayStr()?'已安排到今天，首页待办已更新':`已安排到 ${due}，可在未完成列表查看`);
+  toast(task.done?'已保存，可在已完成列表查看':!due?'已加入首页未排期':due===todayStr()?'已安排到今天，首页待办已更新':`已安排到 ${due}，可在首页${due<todayStr()?'逾期未完成':'即将到期'}查看`);
 }
 function openMatter(kind,id,options={}){
   const x=options.draft||(kind==='todo'?liveTodos():liveNotes()).find(x=>x.id===id);if(!x)return;
@@ -5181,7 +5207,20 @@ function matterListAction(e){
   if(b.dataset.action==='delete')matterDelete(kind,id);
   if(b.dataset.action==='convert')matterConvert(id);
 }
-$('#noteList').addEventListener('click',matterListAction);$('#todoList').addEventListener('click',matterListAction);
+$('#noteList').addEventListener('click',matterListAction);
+$('#todoList').addEventListener('click',event=>{
+  const button=event.target.closest('[data-home-todo-toggle]');
+  if(!button){matterListAction(event);return;}
+  const key=button.dataset.homeTodoToggle;
+  if(homeTodoExpanded.has(key))homeTodoExpanded.delete(key);
+  else homeTodoExpanded.add(key);
+  renderTodos();
+  const next=$('#todoList [data-home-todo-toggle="'+key+'"]');
+  if(next){
+    next.focus({preventScroll:true});
+    next.scrollIntoView({block:'nearest'});
+  }
+});
 function resetMatterPage(){
   matterPage=1;
   renderNotes();

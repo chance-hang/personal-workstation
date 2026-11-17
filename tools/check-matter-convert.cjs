@@ -5,7 +5,7 @@ const fs=require('node:fs');
 const {chromium}=require('playwright');
 const base=process.env.MATTERS_BASE_URL||'http://127.0.0.1:4184';
 assert(['127.0.0.1','localhost'].includes(new URL(base).hostname));assert.notEqual(new URL(base).port,'4173');
-const baseline='0689b163129afd1e947d2c0f427757a23606e830';
+const baseline='2f2f6242b36b0e46c0ae74e18c6636e4b6f6f7c4';
 const original=execFileSync('git',['show',baseline+':app.js'],{encoding:'utf8'}).replace(/\r\n/g,'\n');
 const source=fs.readFileSync('app.js','utf8').replace(/\r\n/g,'\n');
 let count=0,browser;const pass=name=>{count++;console.log('PASS '+name)};
@@ -20,11 +20,12 @@ for(const [name,start,end] of [
  const part=s=>s.slice(s.indexOf(start),end?s.indexOf(end,s.indexOf(start)):s.length);
  assert(original.includes(start)&&source.includes(start));assert.equal(part(source),part(original),name);
 }
-assert.equal(fs.readFileSync('styles.css','utf8').replace(/\r\n/g,'\n'),execFileSync('git',['show',baseline+':styles.css'],{encoding:'utf8'}).replace(/\r\n/g,'\n'));
-pass('six protected source regions and all CSS identical to accepted daily-budget source');
+const existingCss=fs.readFileSync('styles.css','utf8').replace(/\r\n/g,'\n').replace(/^.*\[data-home-todo-toggle\].*\n/gm,'');
+assert.equal(existingCss,execFileSync('git',['show',baseline+':styles.css'],{encoding:'utf8'}).replace(/\r\n/g,'\n'));
+pass('protected source and CSS outside the home disclosure match the production baseline');
 (async()=>{
  await fetch(base+'/__mock_gists/local-mock',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:{'data.json':{content:null}}})});
- browser=await chromium.launch({headless:true});const errors=[],external=[];
+ browser=await chromium.launch({headless:true,executablePath:process.env.QUADRANT_BROWSER});const errors=[],external=[];
  const c=await browser.newContext({viewport:{width:1280,height:1000},timezoneId:'Asia/Shanghai'});
  await c.addInitScript(()=>{if(location.protocol==='http:')window.localStorage.setItem('wb_sidebar_open','0')});
  await c.route('**/*',r=>{const u=new URL(r.request().url());if(['127.0.0.1','localhost'].includes(u.hostname)&&u.port===new URL(base).port)return r.continue();external.push(u.origin);return r.abort()});
@@ -69,11 +70,12 @@ pass('six protected source regions and all CSS identical to accepted daily-budge
  assert.equal(await p.locator('#matterPageStatus').innerText(),'第 8 / 8 页 · 71–79 条');
  assert(await p.locator('#noteList .matter-row').count()<=10);
  assert.equal(await p.locator('#noteList [data-id="note-task:convert-2"]').count(),1);
- assert.equal(await p.locator('#todoList [data-id="note-task:convert-2"]').count(),0);
- pass('future task opens its own page without overflowing the list or appearing on today home');
+ assert.equal(await p.locator('#home-todo-upcoming-rows [data-id="note-task:convert-2"]').count(),1);
+ assert.equal(await p.locator('#focusTodo').innerText(),'0/14');
+ pass('future task opens its own page and appears in upcoming without counting toward today');
  await p.evaluate(()=>openMatters('notes'));await row(3).locator('[data-action="convert"]').click();
  await p.locator('#matterDueShortcuts [data-days="none"]').click();await p.locator('#matterSave').click();
- assert.equal(await p.locator('#noteList [data-id="note-task:convert-3"]').count(),1);assert.equal(await p.locator('#todoList [data-id="note-task:convert-3"]').count(),0);
+ assert.equal(await p.locator('#noteList [data-id="note-task:convert-3"]').count(),1);assert.equal(await p.locator('#home-todo-unscheduled-rows [data-id="note-task:convert-3"]').count(),1);
  assert.equal(await p.evaluate(()=>todoDue(S.todos.find(x=>x.sourceNoteId==='convert-3'))),'');
  pass('explicit no-date choice remains visible in pending and does not count as a today plan');
  await p.evaluate(()=>{const old=newMatterTodo('已删除的关联事项','2026-09-02',{id:'note-task:convert-4',sourceNoteId:'convert-4',deletedAt:noteTime()});S.todos.push(old);refreshMatters();openMatters('notes')});
