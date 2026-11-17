@@ -1,11 +1,12 @@
 # RELEASE HISTORY
 
-## 2026-11-16 — 四象限时间管理（v3.25.0）
+## 2026-11-17 — 四象限时间管理（v3.25.0）
 
-用户授权自行审计后发布。已完成 119 组检查，进入正式推送与线上核验。
+用户授权自行审计后发布。119 组检查通过，正式 main 与 GitHub Pages 已升级。
 
 - Source：`review/time-quadrants` / `084678f`；正式基线：`22d7a41`。
-- 发布分支：`release/time-quadrants-v3.25.0`；缓存：`prod-time-quadrants-20261116-1`。
+- 发布分支 `release/time-quadrants-v3.25.0`，发布提交 `36a5cf8a105ba14ae1662234eb51e85dcb8d9b62`，缓存 `prod-time-quadrants-20261116-1`。
+- GitHub Pages 构建 `43988690742` 成功。线上 HTML、CSS 和 JS 均为 HTTP 200，与发布提交逐字节一致。
 - 功能：任务分类、手工实际用时、每日复盘、区间 Markdown 导出，以及电脑/手机布局修正。
 - 新字段纳入原保存/镜像/备份/同步流程；登录、加密和存储路径保留。无真实数据或 Mock 数据迁移。
 - 回滚 bundle 已验证；审计证据见 RELEASE_AUDIT_V3_25.md。真实账户跨设备与 iOS 真机验收待实际使用，番茄自动累计仍为第二阶段。

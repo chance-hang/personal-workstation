@@ -2,7 +2,7 @@
 
 ## 结论与范围
 
-用户已查看多轮预览，明确授权审计无问题后升级正式库。本轮未发现阻止发布的问题；119 组专项及发布检查通过，尚待推送与线上核验。
+用户已查看多轮预览，明确授权审计无问题后升级正式库。本轮未发现阻止发布的问题；119 组专项及发布检查通过。2026-11-17，正式 main 与 GitHub Pages 已升级至 v3.25.0。
 
 正式基线 `22d7a41417ebf8c8241c2f025c43deebc599921b`；Source `review/time-quadrants` / `084678fc67f88c2c0277f8c2aead9b2246b258b2`。Git fetch 与 GitHub API 均核实 main 未前进。使用独立发布目录 `quadrant-release` 和分支 `release/time-quadrants-v3.25.0`，原云盘故障目录与用户 4187 预览不变。
 
@@ -39,4 +39,6 @@ Windows 执行环境使用 `NODE_PATH` 指向现有 Playwright 运行时，`QUAD
 
 完整历史备份 `../prod-rollback-quadrants-22d7a41.bundle` 已验证包含原 main 完整历史。回滚采用新提交，不重写远端历史，不自动回滚业务数据。
 
-正式网址已只读核验为 https://chance-hang.github.io/personal-workstation/ ，发布前 HTTP 200，加载 v3.24.0 缓存版本。发布提交、Pages 构建与上线文件核验结果将在完成后追加。
+2026-11-17 发布内容提交为 `36a5cf8a105ba14ae1662234eb51e85dcb8d9b62`。正式 main 从回滚基线快进，远端发布分支和验收分支分别与本地发布提交和 Source 一致。[GitHub Pages 首次上线构建](https://github.com/chance-hang/personal-workstation/actions/runs/43988690742) 已成功。
+
+[正式工作台](https://chance-hang.github.io/personal-workstation/) 首页及带 `prod-time-quadrants-20261116-1` 参数的 CSS 和 JS 均返回 HTTP 200。三项线上响应按 Git blob 格式计算哈希，与发布提交逐字节一致，首页加载新版资源。

@@ -1,6 +1,6 @@
 # 四象限时间管理 · 第一版验收
 
-**状态**　Release Ready。用户已查看多轮预览并于 2026-11-16 授权审计通过后发布。接受的 Source 为 review/time-quadrants / 084678fc67f88c2c0277f8c2aead9b2246b258b2；发布验证见 docs/RELEASE_AUDIT_V3_25.md。
+**状态**　v3.25.0 已于 2026-11-17 发布，待正式网页业务验收。接受的 Source 为 `review/time-quadrants` / `084678fc67f88c2c0277f8c2aead9b2246b258b2`。发布验证见 [RELEASE_AUDIT_V3_25.md](RELEASE_AUDIT_V3_25.md)。
 
 ## 基线与隔离
 
@@ -9,6 +9,8 @@
 - 用户授权独立开发与验证。预览只使用 4187 端口的本地 Mock，专项自动化另起 4188，既有功能回归使用 4189。自动化仅使用合成数据及临时浏览器，正式业务数据与账户未接入。
 
 ## 预览与使用
+
+正式环境从「事项 → 四象限时间管理」进入。[打开正式工作台](https://chance-hang.github.io/personal-workstation/)
 
 [打开电脑预览](http://127.0.0.1:4187/?mockSync=1#time-quadrants)。顶部有「待验收 · 本地模拟环境」提示。若本机服务已停止，从本验收仓库根目录在 PowerShell 运行下列命令，再打开链接。
 
