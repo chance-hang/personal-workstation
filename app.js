@@ -3034,7 +3034,7 @@ $$('nav.tabbar a').forEach(a=>a.addEventListener('click',()=>{
   const p=a.dataset.p;$$('.page').forEach(x=>x.classList.remove('active'));
   $('#page-'+p).classList.add('active');
   requestAnimationFrame(syncStickyOffsets);
-  if(p==='today')renderWorklog();if(p==='money')renderMoney();if(p==='heat')renderHeat();if(p==='notes')renderNotes();if(p==='history')renderActiveHis();if(p==='learning')renderLearning();
+  if(p==='today')renderWorklog();if(p==='money')renderMoney();if(p==='heat')renderHeat();if(p==='notes'){renderNotes();renderTimeQuadrants()}if(p==='history')renderActiveHis();if(p==='learning')renderLearning();
   /* v3.20.31: 切换 tab 后刷新侧边栏二级模块 */
   renderSidebar(p);
   /* 强制滚动到指定 sec（被 goTab 第二参数触发，普通 tabbar 切换不进入） */
@@ -4345,21 +4345,40 @@ function timeSetMode(review){
   renderTimeQuadrants();
 }
 
+const TIME_BOARD_PREVIEW_SIZE=3;
+const TIME_BOARD_PAGE_SIZE=10;
+const timeBoardPages=new Map();
+let timeSelectedQuadrant=null,timeExpandedQuadrant=null,timeBoardFilter='';
+let timeFollowToday=true,timeBoardRenderedToday='';
+
 function timeSelectedDay(){
   const input=$('#quadrantDay');
-  if(!timeValidDay(input.value))input.value=todayStr();
+  if(timeFollowToday||!timeValidDay(input.value))input.value=todayStr();
   return input.value;
 }
 
-function timeBoardRow(task){
+function timeBoardFollowups(tasks,day,today){
+  if(day>today)return new Set();
+  const workedBefore=new Set(timeEntries().filter(entry=>entry.day<day).map(entry=>entry.taskId));
+  return new Set(tasks.filter(task=>{
+    if(task.done||(day<today&&timeTaskStatus(task,day)!=='未完成'))return false;
+    const due=todoDue(task).slice(0,10);
+    if(due)return timeValidDay(due)&&due<day;
+    return workedBefore.has(task.id)||timeDayEvents(task).some(event=>event.action==='重新打开'&&matterLocalDay(event.at)<day);
+  }).map(task=>task.id));
+}
+
+function timeBoardRow({task,followup=false}){
   const due=todoDue(task).replace('T',' '),minutes=timePlanOf(task).minutes;
-  const status=task.done?'已完成':matterIsOverdue(task)?'已逾期':'未完成';
+  const overdue=matterIsOverdue(task);
+  const status=task.done?'已完成':overdue?'已逾期':'未完成';
+  const original=followup?' <span class="quadrant-original">原象限：'+TIME_QUADRANTS[timeQuadrant(task)]+'</span>':'';
   return `<article class="quadrant-task ${task.done?'is-done':''}" data-task-id="${esc(task.id)}">
     <button type="button" class="matter-check" data-time-action="toggle" aria-label="${task.done?'重新打开':'完成'} ${esc(task.text)}" aria-pressed="${!!task.done}">
       <span class="matter-check-mark" aria-hidden="true">${task.done?'<svg viewBox="0 0 16 16" fill="none"><path d="m4 8 2.5 2.5L12 5"/></svg>':''}</span>
     </button>
     <div class="quadrant-task-content"><div class="quadrant-task-title">${esc(task.text)}</div>
-      <div class="quadrant-meta">${status}${due?' · 计划 '+esc(due):''}${minutes?' · 计划用时 '+minutes+' 分钟':''}</div>
+      <div class="quadrant-meta"><span class="${followup||overdue?'quadrant-task-alert':''}">${status}</span>${due?' · 计划 '+esc(due):''}${minutes?' · 计划用时 '+minutes+' 分钟':''}${original}</div>
       <div class="quadrant-task-actions"><button type="button" data-time-action="detail">详情 / 分类</button><button type="button" data-time-action="log">记用时</button></div>
     </div>
   </article>`;
@@ -4367,49 +4386,95 @@ function timeBoardRow(task){
 
 function timeBoardItems(items,key){
   if(items.length)return items.map(timeBoardRow).join('');
-  const empty=key?'暂无任务':'旧任务和判断尚未填全的任务显示于此。';
+  const empty=key?'暂无任务':'暂无未分类或跨日跟进事项。';
   return `<p class="quadrant-empty">${empty}</p>`;
+}
+
+function timeBoardPage(items,key){
+  const totalPages=Math.max(1,Math.ceil(items.length/TIME_BOARD_PAGE_SIZE));
+  const page=Math.min(totalPages,Math.max(1,timeBoardPages.get(key)||1));
+  timeBoardPages.set(key,page);
+  const start=(page-1)*TIME_BOARD_PAGE_SIZE,end=Math.min(items.length,start+TIME_BOARD_PAGE_SIZE);
+  const current=items.slice(start,end);
+  const followups=current.filter(item=>item.followup),ordinary=current.filter(item=>!item.followup);
+  const rows=key||!items.some(item=>item.followup)?timeBoardItems(current,key):
+    (followups.length?`<div class="quadrant-list-group" role="group" aria-label="跨日跟进"><p class="quadrant-list-group-name">跨日跟进</p>${followups.map(timeBoardRow).join('')}</div>`:'')+
+    (ordinary.length?`<div class="quadrant-list-group" role="group" aria-label="待分类"><p class="quadrant-list-group-name">待分类</p>${ordinary.map(timeBoardRow).join('')}</div>`:'');
+  const pager=totalPages>1?`<div class="quadrant-pagination" role="group" aria-label="${TIME_QUADRANTS[key]}分页">
+    <button type="button" data-time-action="page-quadrant" data-direction="-1" ${page===1?'disabled':''}>上一页</button>
+    <span class="quadrant-page-status" role="status">第 ${page} / ${totalPages} 页 · ${start+1}–${end} 项</span>
+    <button type="button" data-time-action="page-quadrant" data-direction="1" ${page===totalPages?'disabled':''}>下一页</button>
+  </div>`:'';
+  return `<div class="quadrant-paged-list" data-time-list="${key}" role="region" tabindex="-1" aria-label="${TIME_QUADRANTS[key]} · 第 ${page} 页">${rows}${pager}</div>`;
 }
 
 function timeBoardCell(items,key,selected){
   const title=TIME_QUADRANTS[key],mark=key?'<i class="quadrant-mark" aria-hidden="true"></i>':'';
+  const followups=key?0:items.filter(item=>item.followup).length;
+  const mobileCount=items.length+' 项'+(followups?' · 跨日 '+followups+' 项':'');
+  const open=key===timeExpandedQuadrant;
+  const viewAll=key&&items.length>TIME_BOARD_PREVIEW_SIZE?
+    `<button type="button" class="quadrant-view-all" data-time-action="expand-quadrant" data-quadrant-key="${key}" aria-controls="quadrantTasks" aria-expanded="${open}">查看全部 ${items.length} 项 <span aria-hidden="true">›</span></button>`:'';
   return `<section class="quadrant-card" data-quadrant="${key}" aria-label="${title}">
     <button type="button" class="quadrant-cell-toggle" data-time-action="select-quadrant" data-quadrant-key="${key}"
-      aria-pressed="${key===selected}" aria-controls="quadrantMobileTasks">
-      <span class="quadrant-cell-name">${mark}${title}</span><span class="quadrant-cell-count">${items.length} 项</span>
+      aria-pressed="${key===selected}" aria-controls="quadrantTasks">
+      <span class="quadrant-cell-name">${mark}${title}</span><span class="quadrant-cell-count">${mobileCount}</span>
     </button>
     <div class="quadrant-desktop-content">
-      <div class="quadrant-card-heading"><h3>${mark}${title}</h3><span>${items.length} 项</span></div>
-      ${timeBoardItems(items,key)}
+      <div class="quadrant-card-heading"><h3 tabindex="-1">${mark}${title}</h3><span>${mobileCount}</span></div>
+      ${key?timeBoardItems(items.slice(0,TIME_BOARD_PREVIEW_SIZE),key):timeBoardPage(items,key)}
+      ${viewAll}
     </div>
   </section>`;
 }
 
-let timeMobileQuadrant=null;
-function renderTimeBoard(data){
+function renderTimeBoard(day,data,today){
   const scope=$('#quadrantScope').value;
+  const boardDay=scope==='pending'?today:day;
+  const filterKey=scope+':'+(scope==='day'||scope==='pending'?boardDay:'');
+  if(filterKey!==timeBoardFilter){
+    timeBoardFilter=filterKey;
+    timeBoardPages.clear();
+    timeSelectedQuadrant=null;
+    timeExpandedQuadrant=null;
+  }
+  const source=liveTodos();
+  const followups=scope==='day'||scope==='pending'?timeBoardFollowups(source,boardDay,today):new Set();
   const matches={
     pending:task=>!task.done,
-    day:task=>data.related.has(task.id),
+    day:task=>data.related.has(task.id)||followups.has(task.id),
     unscheduled:task=>!todoDue(task),
     all:()=>true
   };
-  const tasks=liveTodos().filter(matches[scope]);
+  const tasks=source.filter(matches[scope]);
   const sorted=tasks.map(record=>({kind:'todo',record})).sort(matterSort);
   const groups=new Map(TIME_QUADRANT_KEYS.map(key=>[key,[]]));
-  sorted.forEach(({record})=>groups.get(timeQuadrant(record)).push(record));
+  const ordinaryUnclassified=[];
+  sorted.forEach(({record:task})=>{
+    const followup=followups.has(task.id);
+    const key=followup?'':timeQuadrant(task);
+    (key||followup?groups.get(key):ordinaryUnclassified).push({task,followup});
+  });
+  groups.get('').push(...ordinaryUnclassified);
   const hint={
     pending:`显示 ${tasks.length} 项未完成，其中 ${tasks.filter(task=>!todoDue(task)).length} 项未排期。`,
-    day:`显示 ${tasks.length} 项，含所选日计划、完成、重开或已记用时的任务。`,
+    day:`显示 ${tasks.length} 项，含所选日计划、完成、重开或已记用时的任务${followups.size?'，以及跨日跟进':''}。`,
     unscheduled:`显示 ${tasks.length} 项未排期待办。`,
     all:`显示全部 ${tasks.length} 项待办。`
   };
-  $('#quadrantScopeHint').textContent=hint[scope]+'看板按当前分类排列。';
-  const selected=timeMobileQuadrant??TIME_QUADRANT_KEYS.find(key=>groups.get(key).length)??'1';
-  // Start on the upper left in reading order, with urgency increasing to the right.
+  $('#quadrantScopeHint').textContent=hint[scope]+(followups.size?` 未分类区有 ${followups.size} 项跨日跟进。`:'');
+  const selected=timeExpandedQuadrant??timeSelectedQuadrant??TIME_QUADRANT_KEYS.find(key=>groups.get(key).length)??'1';
+  // Urgency increases to the right; keep the unclassified list outside the four plotted cells.
   $('#quadrantCells').innerHTML=['2','1','4','3',''].map(key=>timeBoardCell(groups.get(key),key,selected)).join('');
   const items=groups.get(selected);
-  $('#quadrantMobileTasks').innerHTML=`<div class="quadrant-card-heading"><h3 id="quadrantMobileHeading">${TIME_QUADRANTS[selected]}</h3><span>${items.length} 项</span></div>${timeBoardItems(items,selected)}`;
+  const panel=$('#quadrantTasks');
+  panel.toggleAttribute('data-expanded',timeExpandedQuadrant!==null);
+  const panelCount=items.length+' 项'+(!selected&&followups.size?' · 跨日 '+followups.size+' 项':'');
+  panel.innerHTML=`<div class="quadrant-card-heading">
+    <h3 id="quadrantTasksHeading" tabindex="-1">${TIME_QUADRANTS[selected]}${timeExpandedQuadrant!==null?' · 全部任务':''}</h3>
+    <span>${panelCount}</span>
+    <button type="button" class="quadrant-panel-close" data-time-action="close-quadrant">收起列表</button>
+  </div>${timeBoardPage(items,selected)}`;
 }
 
 function timeEntryKind(entry){
@@ -4450,8 +4515,9 @@ function renderTimeReview(day,data){
 
 function renderTimeQuadrants(){
   if($('#quadrantView').hidden)return;
-  const day=timeSelectedDay(),data=timeDayData(day);
-  if($('#quadrantReview').hidden)renderTimeBoard(data);
+  const day=timeSelectedDay(),data=timeDayData(day),today=todayStr();
+  timeBoardRenderedToday=today;
+  if($('#quadrantReview').hidden)renderTimeBoard(day,data,today);
   else renderTimeReview(day,data);
 }
 
@@ -4562,6 +4628,7 @@ function openTimeEntry(taskId='',entryId=''){
       recordedAt:current.recordedAt||updatedAt,recordedOn:current.recordedOn||todayStr(),updatedAt
     });
     $('#quadrantDay').value=nextDay;
+    timeFollowToday=nextDay===todayStr();
     timeSetMode(true);
     finish();toast('实际用时已保存');
   };
@@ -4668,6 +4735,7 @@ $('#quadrantTab').onclick=()=>setTimeQuadrantView(true);
 $('#quadrantBoardTab').onclick=()=>timeSetMode(false);
 $('#quadrantReviewTab').onclick=()=>timeSetMode(true);
 function selectTimeDay(){
+  timeFollowToday=$('#quadrantDay').value===todayStr();
   if($('#quadrantReview').hidden)$('#quadrantScope').value='day';
   renderTimeQuadrants();
 }
@@ -4676,17 +4744,44 @@ $('#quadrantScope').onchange=renderTimeQuadrants;
 $('#quadrantToday').onclick=()=>{$('#quadrantDay').value=todayStr();selectTimeDay();};
 $('#quadrantAddTime').onclick=()=>openTimeEntry();
 $('#quadrantExport').onclick=openTimeExport;
+function focusTimeList(target){
+  if(!target)return;
+  target.focus({preventScroll:true});
+  target.scrollIntoView({block:'start',behavior:'instant'});
+}
 $('#quadrantView').addEventListener('click',event=>{
   const button=event.target.closest('[data-time-action]');if(!button)return;
   const taskId=button.closest('[data-task-id]')?.dataset.taskId;
   switch(button.dataset.timeAction){
     case 'select-quadrant':{
-      timeMobileQuadrant=button.dataset.quadrantKey;
+      timeSelectedQuadrant=button.dataset.quadrantKey;
+      timeExpandedQuadrant=null;
       renderTimeQuadrants();
       $('.quadrant-cell-toggle[aria-pressed=true]')?.focus({preventScroll:true});
-      // Reveal the list below the matrix after a touch, while retaining the selected button.
-      const panelTop=$('#quadrantMobileTasks').getBoundingClientRect().top;
+      const panelTop=$('#quadrantTasks').getBoundingClientRect().top;
       if(event.detail&&panelTop>innerHeight-148)window.scrollBy({top:panelTop-innerHeight+148,behavior:'instant'});
+      break;
+    }
+    case 'expand-quadrant':
+      timeExpandedQuadrant=button.dataset.quadrantKey;
+      renderTimeQuadrants();
+      focusTimeList($('#quadrantTasksHeading'));
+      break;
+    case 'close-quadrant':{
+      const key=timeExpandedQuadrant;
+      timeExpandedQuadrant=null;
+      renderTimeQuadrants();
+      const target=$('#quadrantGrid [data-quadrant="'+key+'"]');
+      focusTimeList(target?.querySelector('.quadrant-view-all')||target?.querySelector('h3')||$('#quadrantBoardTab'));
+      break;
+    }
+    case 'page-quadrant':{
+      const key=button.closest('[data-time-list]').dataset.timeList;
+      const root=button.closest('#quadrantTasks')||$('#quadrantGrid');
+      const page=timeBoardPages.get(key)||1;
+      timeBoardPages.set(key,page+Number(button.dataset.direction));
+      renderTimeQuadrants();
+      focusTimeList(root.querySelector('[data-time-list="'+key+'"]'));
       break;
     }
     case 'detail':
@@ -4694,10 +4789,12 @@ $('#quadrantView').addEventListener('click',event=>{
       if($('#matterEditForm'))$('#modalBox').classList.add('quadrant-task-dialog');
       break;
     case 'toggle':{
-      const list=button.closest('#quadrantMobileTasks')||$('#quadrantGrid');
+      const root=button.closest('#quadrantTasks')||$('#quadrantGrid');
+      const group=button.closest('[data-time-list]')?.dataset.timeList;
       matterToggle('todo',taskId);
-      const row=list.querySelector('.quadrant-task[data-task-id="'+CSS.escape(taskId)+'"]');
-      (row?.querySelector('.matter-check')||$('#quadrantBoardTab')).focus({preventScroll:true});
+      const row=root.querySelector('.quadrant-task[data-task-id="'+CSS.escape(taskId)+'"]');
+      const fallback=group===undefined?null:root.querySelector('[data-time-list="'+group+'"]');
+      (row?.querySelector('.matter-check')||fallback||$('#quadrantBoardTab')).focus({preventScroll:true});
       break;
     }
     case 'log':openTimeEntry(taskId);break;
@@ -4870,7 +4967,11 @@ $('#todayOpenMatters').onclick=()=>openMatters('pending');
 $('#todoDueDate').value=todayStr();$('#todoNoDue').onclick=()=>{$('#todoDueDate').value='';$('#todoDueTime').value=''};
 setInterval(()=>{
   if(document.visibilityState!=='visible'||$('#modalMask').classList.contains('show'))return;
-  renderHeader();renderFocusCard();renderTodos();if($('#page-notes').classList.contains('active'))renderNotes();
+  renderHeader();renderFocusCard();renderTodos();
+  if($('#page-notes').classList.contains('active')){
+    renderNotes();
+    if(timeBoardRenderedToday!==todayStr())renderTimeQuadrants();
+  }
 },60000);
 
 /* ============ 今日已做 · 工作日志 ============ */

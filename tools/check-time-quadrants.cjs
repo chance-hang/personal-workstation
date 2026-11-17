@@ -166,6 +166,121 @@ async function startMock(){
   await scopePage.context().close();
   pass('默认四项未完成包含两条已分类未排期任务，各范围互通，复盘日期不改看板范围');
 
+  const followPage=await newPage(first,{viewport:{width:1440,height:1000}});
+  await ready(followPage,first+view);
+  const nextDay='2026-11-17';
+  await followPage.evaluate(({day,prior,nextDay})=>{
+    sessionPasscode=null;clearTimeout(syncTimer);
+    const task=(id,due,extra={})=>newMatterTodo(id,due,{
+      id,date:prior,createdAt:prior+'T02:00:00.000Z',
+      timePlan:{important:true,urgent:true},
+      ...extra
+    });
+    S.todos=[
+      ...Array.from({length:11},(_,i)=>task('跨日任务 '+String(i+1).padStart(2,'0'),prior)),
+      task('已用时未排期',''),task('昨天重开未排期','',{completionEvents:[{action:'重新打开',at:prior+'T08:00:00+08:00'}]}),
+      task('尚未排期',''),task('将来任务',nextDay),
+      task('昨天已完成',prior,{done:true,completedAt:prior+'T05:00:00Z'}),
+      task('已删除',prior,{deletedAt:prior+'T07:00:00Z'}),
+      ...Array.from({length:12},(_,i)=>task('今天任务 '+String(i+1).padStart(2,'0'),day)),
+      task('今天待分类',day,{timePlan:null})
+    ];
+    S.timeEntries=[
+      {id:'worked-before',taskId:'已用时未排期',day:prior,minutes:20,quadrant:'1'},
+      {id:'worked-now',taskId:'跨日任务 01',day,minutes:15,quadrant:'1'},
+      {id:'worked-future-plan',taskId:'将来任务',day:prior,minutes:15,quadrant:'1'}
+    ];
+    renderAll();
+  },{day:today,prior:yesterday,nextDay});
+  const carry=followPage.locator('#quadrantGrid [data-quadrant=""] .quadrant-paged-list');
+  const todayCell=followPage.locator('#quadrantGrid [data-quadrant="1"]');
+  const list=followPage.locator('#quadrantTasks');
+  const rows=area=>area.locator('.quadrant-task');
+  const byId=(area,id)=>area.locator('[data-task-id="'+id+'"]');
+  await followPage.locator('#quadrantToday').click();
+  assert.match(await followPage.locator('#quadrantScopeHint').textContent(),/13 项跨日跟进/);
+  assert.equal(await rows(carry).count(),10);
+  const firstCarry=await rows(carry).evaluateAll(nodes=>nodes.map(node=>node.dataset.taskId));
+  assert(firstCarry.includes('跨日任务 01'));
+  assert.equal(await byId(followPage.locator('#quadrantGrid'),'跨日任务 01').count(),1);
+  assert.equal(await byId(carry,'跨日任务 01').locator('.quadrant-task-alert').textContent(),'已逾期');
+  assert.equal(await byId(carry,'跨日任务 01').locator('.quadrant-original').textContent(),'原象限：重要且紧急');
+  assert(await byId(carry,'跨日任务 01').getByText('计划 '+yesterday,{exact:false}).isVisible());
+  assert.equal(await followPage.locator('#quadrantGrid').getByText(/尚未排期|昨天已完成|已删除|将来任务/).count(),0);
+  assert(await carry.getByRole('button',{name:'上一页'}).isDisabled());
+  await carry.getByRole('button',{name:'下一页'}).click();
+  const lastCarry=await rows(carry).evaluateAll(nodes=>nodes.map(node=>node.dataset.taskId));
+  assert.equal(lastCarry.length,4);
+  assert(lastCarry.every(id=>!firstCarry.includes(id)));
+  assert.equal(await byId(carry,'已用时未排期').locator('.quadrant-task-alert').textContent(),'未完成');
+  assert(await byId(carry,'今天待分类').locator('.quadrant-original').count()===0);
+  assert(await carry.getByRole('button',{name:'下一页'}).isDisabled());
+  if(envOutput){
+    await carry.scrollIntoViewIfNeeded();
+    await followPage.screenshot({path:path.join(envOutput,'quadrant-followup-desktop.png'),animations:'disabled'});
+  }
+  pass('按日期跟进只复用未完成任务，已记用时不重复，原象限、计划日和红色状态可见，未分类每页最多十条');
+
+  assert.equal(await rows(todayCell).count(),3);
+  assert.equal(await todayCell.locator('.quadrant-pagination').count(),0);
+  await todayCell.getByRole('button',{name:'查看全部 12 项'}).click();
+  assert(await list.isVisible());
+  assert.equal(await rows(list).count(),10);
+  assert.equal(await todayCell.getByRole('button',{name:'查看全部 12 项'}).getAttribute('aria-expanded'),'true');
+  await list.getByRole('button',{name:'下一页'}).click();
+  assert.equal(await rows(list).count(),2);
+  await rows(list).last().getByRole('button',{name:'详情 / 分类'}).click();
+  assert.equal(await followPage.locator('#matterImportant').inputValue(),'yes');
+  await submit(followPage,'取消');
+  await list.getByRole('button',{name:'收起列表'}).click();
+  assert(!(await list.isVisible()));
+  assert(await todayCell.getByRole('button',{name:'查看全部 12 项'}).evaluate(button=>document.activeElement===button));
+  await assertCenteredAxes(followPage);
+  pass('桌面象限最多三条预览，展开后在独立任务区分页，详情可操作，收起后还原焦点');
+
+  await followPage.setViewportSize({width:390,height:844});
+  if(await followPage.locator('body').evaluate(el=>el.classList.contains('nav-open')))await followPage.locator('#sideToggle').click();
+  const unclassified=followPage.locator('.quadrant-cell-toggle[data-quadrant-key=""]');
+  await unclassified.click();
+  assert(await list.isVisible());
+  assert.equal(await rows(list).count(),4);
+  assert(await list.getByRole('button',{name:'下一页'}).isDisabled());
+  if(envOutput){
+    await list.locator('.quadrant-pagination').scrollIntoViewIfNeeded();
+    await followPage.screenshot({path:path.join(envOutput,'quadrant-followup-mobile.png'),animations:'disabled'});
+  }
+  for(const id of lastCarry){
+    if(id!=='今天待分类')await byId(list,id).locator('.matter-check').click();
+  }
+  // The final row on page two leaves the scope; the list must clamp without a manual page change.
+  assert.equal(await rows(list).count(),1);
+  await byId(list,'今天待分类').getByRole('button',{name:'详情 / 分类'}).click();
+  await followPage.locator('#matterDueDate').fill(nextDay);
+  await submit(followPage,'保存');
+  assert.equal(await rows(list).count(),10);
+  assert.equal(await list.locator('.quadrant-pagination').count(),0);
+  await byId(list,'跨日任务 01').getByRole('button',{name:'详情 / 分类'}).click();
+  await followPage.locator('#matterDueDate').fill(nextDay);
+  await submit(followPage,'保存');
+  assert.equal(await rows(list).count(),9);
+  assert.equal(await byId(list,'跨日任务 01').count(),0);
+  assert.equal(await followPage.evaluate(()=>S.todos.find(t=>t.id==='跨日任务 01').timePlan.important),true);
+  pass('窄屏同样分页，勾选完成和改计划日期会移出跟进，数量变少时页码回到有效范围');
+
+  await followPage.clock.setSystemTime(new Date(today+'T16:00:00Z'));
+  await followPage.clock.runFor(60001);
+  assert.equal(await followPage.locator('#quadrantDay').inputValue(),nextDay);
+  assert.match(await followPage.locator('#quadrantScopeHint').textContent(),/跨日跟进/);
+  await unclassified.click();
+  assert.equal(await rows(list).count(),10);
+  await list.getByRole('button',{name:'下一页'}).click();
+  assert(await list.locator('.quadrant-original',{hasText:'重要且紧急'}).first().isVisible());
+  assert.equal(await followPage.evaluate(plan=>S.todos.filter(t=>t.id.startsWith('今天任务 ')).every(t=>t.dueAt===plan),today),true);
+  await followPage.locator('#quadrantReviewTab').click();
+  assert(!(await followPage.locator('#quadrantReview').getByText('今天任务 01',{exact:true}).isVisible()));
+  await followPage.context().close();
+  pass('跨午夜后跟随今天的日期看板自动承接昨天任务，计划日和每日复盘口径保持原样');
+
   for(const scale of [1,1.25,1.5,2]){
     const axisPage=await newPage(first,{viewport:{width:1280,height:1000},deviceScaleFactor:scale});
     await ready(axisPage,first+view);
@@ -419,22 +534,22 @@ async function startMock(){
     assert.deepEqual(layout.axisWeight,['2px','2px']);
     await assertCenteredAxes(phone);
     assert(layout.control>=44&&layout.board>=44&&layout.filtersFit&&layout.labelsFit&&(!touch||layout.font>=16),JSON.stringify(layout));
-    const selectedTask=phone.locator('#quadrantMobileTasks [data-task-id="'+oldId+'"]');
+    const selectedTask=phone.locator('#quadrantTasks [data-task-id="'+oldId+'"]');
     if(touch){
       assert(await selectedTask.isVisible());
       const choice=key=>phone.locator('.quadrant-cell-toggle[data-quadrant-key="'+key+'"]');
       await choice('2').tap();
       assert.equal(await choice('2').getAttribute('aria-pressed'),'true');
-      assert(await phone.locator('#quadrantMobileTasks').getByText('暂无任务').isVisible());
+      assert(await phone.locator('#quadrantTasks').getByText('暂无任务').isVisible());
       await choice('').tap();
-      assert.equal(await phone.locator('#quadrantMobileHeading').innerText(),'未分类');
+      assert.equal(await phone.locator('#quadrantTasksHeading').innerText(),'未分类');
       await choice('1').tap();
       assert(await selectedTask.isVisible());
       await selectedTask.getByRole('button',{name:'详情 / 分类'}).tap();
       assert(await phone.locator('#matterImportant').isVisible());
       await submit(phone,'取消');
     }else{
-      assert(!(await phone.locator('#quadrantMobileTasks').isVisible()));
+      assert(!(await phone.locator('#quadrantTasks').isVisible()));
       assert(await phone.locator('#quadrantGrid [data-task-id="'+oldId+'"]').isVisible());
     }
     if(envOutput&&[320,390,560,760,1024,1440].includes(width)){
