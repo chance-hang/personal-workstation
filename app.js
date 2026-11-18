@@ -3283,8 +3283,8 @@ function renderTodos(){
   const list=remaining.filter(({record})=>matterInToday(record,t)).sort(order);
   const preview=list.slice(0,8),revealed=list.find(x=>x.record.id===matterHomeRevealId);
   if(revealed&&!preview.includes(revealed)){preview[preview.length-1]=revealed;preview.sort(order)}
-  const upcoming=remaining.filter(({record})=>!record.done&&todoDue(record).slice(0,10)>t).sort(matterSort);
-  const unscheduled=remaining.filter(({record})=>!record.done&&!todoDue(record)).sort(matterSort);
+  const upcoming=remaining.filter(({record})=>!record.done&&!matterInToday(record,t)&&(todoStart(record)>t||todoDue(record).slice(0,10)>t)).sort(matterSort);
+  const unscheduled=remaining.filter(({record})=>!record.done&&!matterInToday(record,t)&&!todoStart(record)&&!todoDue(record)).sort(matterSort);
   const current=list.length?matterRowsHtml(preview,true):'<div class="matter-empty"><b>今天暂无安排</b></div>';
   const showToday=list.length>8?`<button class="matter-more" type="button" onclick="openMatters('today')">查看今日与逾期共 ${list.length} 项</button>`:'';
   $('#todoList').innerHTML=current+showToday+
@@ -3294,9 +3294,10 @@ $('#todoAdd').onclick=()=>addTodo();
 $('#todoIn').addEventListener('keydown',e=>{if(e.key==='Enter')addTodo()});
 function addTodo(){
   const v=$('#todoIn').value.trim();if(!v)return;
-  const date=$('#todoDueDate').value,time=$('#todoDueTime').value;
+  const date=$('#todoDueDate').value,time=$('#todoDueTime').value,plannedStart=$('#todoStartDate').value;
+  if(plannedStart&&date&&plannedStart>date){toast('计划完成不能早于计划开始');return;}
   if(time&&!date){toast('请先选择计划日期，或清除时间');return}
-  const task=newMatterTodo(v,date+(date&&time?'T'+time:''),{matterCategory:$('#todoCategory').value});
+  const task=newMatterTodo(v,date+(date&&time?'T'+time:''),{matterCategory:$('#todoCategory').value,plannedStart});
   S.todos.push(task);
   matterHomeRevealId=task.id;
   $('#todoIn').value='';persist();refreshMatters();
@@ -4356,6 +4357,9 @@ function matterLocalDay(value){
   const time=noteUpdatedAt(value);return time===null?'':fmtDate(new Date(time));
 }
 function todoDue(x){return String('dueAt' in x?x.dueAt||'':x.date||'')}
+function todoStart(x){return timeValidDay(x.plannedStart)?x.plannedStart:''}
+function matterHasStarted(x){return !!x.actualStartedAt||matterStoredProgress(x)>0}
+function matterState(x){return x.done?'已完成':matterHasStarted(x)?'进行中':'待开始'}
 function todoCompletedDay(x){return x.done?matterLocalDay(x.completedAt):''}
 function todoActivityDay(x){return todoCompletedDay(x)||(!('completedAt' in x)?x.date||'':'')}
 function matterIsOverdue(x){
@@ -4366,7 +4370,7 @@ function matterTodayStats(t=todayStr()){
   const tasks=liveTodos();return {done:tasks.filter(x=>todoCompletedDay(x)===t).length,pending:tasks.filter(x=>!x.done&&todoDue(x).slice(0,10)===t).length,overdue:tasks.filter(matterIsOverdue).length};
 }
 function matterInToday(x,t=todayStr()){
-  return x.done?todoCompletedDay(x)===t:!!todoDue(x)&&todoDue(x).slice(0,10)<=t;
+  return x.done?todoCompletedDay(x)===t:matterHasStarted(x)||!!todoStart(x)&&todoStart(x)<=t||!!todoDue(x)&&todoDue(x).slice(0,10)<=t;
 }
 const MATTER_CATEGORIES=Object.freeze({work:'工作',leisure:'娱乐',study:'学习',life:'生活'});
 function matterCategoryOf(record){
@@ -4379,7 +4383,7 @@ function matterCategoryOptions(selected=''){
 }
 for(const id of ['todoCategory','matterCaptureCategory','quadrantCategory'])$('#'+id).insertAdjacentHTML('beforeend',matterCategoryOptions());
 function newMatterTodo(text,dueAt='',extra={}){
-  const now=noteTime();return {id:uid(),text,done:false,date:todayStr(),createdAt:now,updatedAt:now,dueAt,completedAt:null,completionNote:'',deliverables:[],...extra};
+  const now=noteTime();return {progressHistory:[{id:uid(),at:now,progress:0,status:'待开始'}],id:uid(),text,done:false,date:todayStr(),createdAt:now,updatedAt:now,dueAt,completedAt:null,completionNote:'',deliverables:[],...extra};
 }
 function matterTouch(x){
   const previous=noteUpdatedAt(x.updatedAt);x.updatedAt=new Date(Math.max(Date.now(),previous===null?0:previous+1)).toISOString();
@@ -4390,26 +4394,43 @@ function matterStoredProgress(task){
 }
 function matterProgressOf(task){return task.done?100:matterStoredProgress(task)}
 function matterCarriesProgress(task,day){
-  if(task.done||!matterStoredProgress(task))return false;
-  const due=todoDue(task).slice(0,10),started=task.progressStartedOn;
+  if(task.done||!matterHasStarted(task))return false;
+  const due=todoDue(task).slice(0,10),started=matterLocalDay(task.actualStartedAt)||task.progressStartedOn;
   return (timeValidDay(due)&&due<day)||(timeValidDay(started)&&started<day);
 }
-function matterProgressMarkup(task){
-  const progress=matterProgressOf(task);
+function matterProgressMarkup(task,progress=matterProgressOf(task)){
+  if(progress===null)return '<div class="matter-progress">进度未记录</div>';
   return `<div class="matter-progress"><progress max="100" value="${progress}" aria-label="完成进度"></progress><span>${progress}%</span></div>`;
 }
+function matterRecordProgress(task){
+  const last=(task.progressHistory||[]).reduce((max,event)=>Math.max(max,noteUpdatedAt(event.at)||0),0);
+  const event={id:uid(),at:new Date(Math.max(Date.now(),last+1)).toISOString(),progress:matterProgressOf(task),status:matterState(task)};
+  task.progressHistory=[...(task.progressHistory||[]),event];
+}
+function matterStart(id){
+  const task=liveTodos().find(task=>task.id===id);
+  if(!task||task.done||matterHasStarted(task))return;
+  task.actualStartedAt=noteTime();
+  task.progressStartedOn=todayStr();
+  matterRecordProgress(task);
+  matterTouch(task);persist();refreshMatters();toast('任务已开始');
+}
 function matterSaveProgress(task,progress){
+  if(progress>0&&progress<100&&!task.actualStartedAt)task.actualStartedAt=noteTime();
   if(progress<100){
     task.completionProgress=progress;
     if(progress>0)task.progressStartedOn=task.progressStartedOn||todayStr();
     else delete task.progressStartedOn;
   }
+  const changed=!!task.done!==(progress===100);
   matterSetDone(task,progress===100);
+  if(!changed)matterRecordProgress(task);
 }
 function matterSetDone(x,done){
   if(!!x.done===done)return;
   const at=noteTime();x.done=done;x.completedAt=done?at:null;
   x.completionEvents=[...(x.completionEvents||[]),{action:done?'完成':'重新打开',at}];
+  matterRecordProgress(x);
 }
 function matterSource(x){return x.sourceNoteId?liveNotes().find(n=>n.id===x.sourceNoteId):null}
 function matterRecords(includeLinkedNotes=false){
@@ -4436,16 +4457,16 @@ function matterRow({kind,record:x}){
   const linked=kind==='note'?liveTodos().find(t=>t.sourceNoteId===x.id):null;
   const title=kind==='todo'?x.text:x.title||noteTitle(x.content);
   const body=kind==='todo'?x.details||source?.content||'':x.content||'';
-  const overdue=kind==='todo'&&matterIsOverdue(x),inProgress=kind==='todo'&&!x.done&&matterStoredProgress(x)>0;
-  const status=kind==='todo'?(x.done?'已完成':inProgress?'进行中':overdue?'已逾期':todoDue(x)?'待完成':'未定时间'):(x.done?'已归档':'备忘');
+  const overdue=kind==='todo'&&matterIsOverdue(x),inProgress=kind==='todo'&&!x.done&&matterHasStarted(x);
+  const status=kind==='todo'?matterState(x):(x.done?'已归档':'备忘');
   const stamp=kind==='todo'?(x.done?`完成：${x.completedAt?matterTimeLabel(x.completedAt):'时间未记录'}`:`计划：${todoDue(x).replace('T',' ')||'暂未安排'}`):`记录：${matterTimeLabel(x.createdAt||x.updatedAt)}`;
   return `<article class="matter-row ${x.done?'is-done':''}" data-kind="${kind}" data-id="${esc(x.id)}">
     <button type="button" class="matter-check" data-action="toggle" aria-label="${x.done?'重新打开':kind==='todo'?'完成待办':'归档备忘'}" aria-pressed="${!!x.done}"><span class="matter-check-mark" aria-hidden="true">${x.done?'<svg viewBox="0 0 16 16" fill="none"><path d="m4 8 2.5 2.5L12 5"/></svg>':kind==='note'?'<svg viewBox="0 0 16 16" fill="none"><path d="M5 5.5h6M5 8h6M5 10.5h4"/></svg>':''}</span></button>
-    <div class="matter-row-body"><div class="matter-row-title"><b>${esc(title)}</b><span class="matter-badge ${overdue&&!inProgress?'overdue':''}">${status}</span>${overdue&&inProgress?'<span class="matter-badge overdue">已逾期</span>':''}</div>
-    ${body?`<p class="matter-excerpt">${esc(body)}</p>`:''}<div class="matter-row-meta"><span>${esc(stamp)}</span>${matterCategoryOf(x)?`<span>${MATTER_CATEGORIES[matterCategoryOf(x)]}</span>`:''}${kind==='todo'&&x.timePlan?`<span>${TIME_QUADRANTS[timeQuadrant(x)]}</span>`:''}${source?'<span>来自备忘</span>':''}${linked?'<span>已关联待办</span>':''}${matterReferences(x).length?`<span>交付物 ${matterReferences(x).length}</span>`:''}</div>
+    <div class="matter-row-body"><div class="matter-row-title"><b>${esc(title)}</b><span class="matter-badge">${status}</span>${overdue&&inProgress?'<span class="matter-badge">超出计划 '+daysBetween(todoDue(x).slice(0,10),todayStr())+' 天</span>':''}</div>
+    ${body?`<p class="matter-excerpt">${esc(body)}</p>`:''}<div class="matter-row-meta"><span>${esc(stamp)}</span>${kind==='todo'&&todoStart(x)?'<span>开始：'+esc(todoStart(x))+'</span>':''}${matterCategoryOf(x)?`<span>${MATTER_CATEGORIES[matterCategoryOf(x)]}</span>`:''}${kind==='todo'&&x.timePlan?`<span>${TIME_QUADRANTS[timeQuadrant(x)]}</span>`:''}${source?'<span>来自备忘</span>':''}${linked?'<span>已关联待办</span>':''}${matterReferences(x).length?`<span>交付物 ${matterReferences(x).length}</span>`:''}</div>
     ${kind==='todo'?matterProgressMarkup(x):''}
     ${x.completionNote?`<p class="matter-result-note">结果：${esc(x.completionNote)}</p>`:''}
-    <div class="matter-row-actions"><button type="button" data-action="edit">详情</button>${kind==='note'?`<button type="button" data-action="convert">${linked?'查看待办':'安排为待办'}</button>`:''}<button type="button" data-action="delete">删除</button></div></div></article>`;
+    <div class="matter-row-actions">${kind==='todo'&&!x.done&&!matterHasStarted(x)?'<button type="button" data-action="start">开始任务</button>':''}<button type="button" data-action="edit">详情</button>${kind==='note'?`<button type="button" data-action="convert">${linked?'查看待办':'安排为待办'}</button>`:''}<button type="button" data-action="delete">删除</button></div></div></article>`;
 }
 /* ============ 四象限时间管理 ============ */
 const TIME_QUADRANTS=Object.freeze({'1':'重要且紧急','2':'重要不紧急','3':'紧急不重要','4':'不重要不紧急','':'未分类'});
@@ -4534,18 +4555,38 @@ function timeDayEvents(task){
     .sort((a,b)=>noteUpdatedAt(a.at)-noteUpdatedAt(b.at));
 }
 
+function matterProgressOn(task,day){
+  if(day===todayStr())return {progress:matterProgressOf(task),status:matterState(task)};
+  const events=(task.progressHistory||[]).filter(event=>event&&noteUpdatedAt(event.at)!==null&&matterLocalDay(event.at)<=day);
+  events.sort((a,b)=>noteUpdatedAt(a.at)-noteUpdatedAt(b.at)||String(a.id).localeCompare(String(b.id)));
+  return events.at(-1)||null;
+}
+function matterScheduledOn(task,day){
+  if(task.deletedAt&&matterLocalDay(task.deletedAt)<=day)return false;
+  const actual=matterLocalDay(task.actualStartedAt)||task.progressStartedOn||'';
+  const start=[todoStart(task),actual].filter(Boolean).sort()[0];
+  if(!start)return false;
+  if(start>day)return false;
+  if(day<=todayStr()&&timeTaskStatus(task,day)==='已完成'){
+    return timeDayEvents(task).some(event=>event.action==='完成'&&matterLocalDay(event.at)===day)||todoCompletedDay(task)===day;
+  }
+  const completed=todoCompletedDay(task);
+  return !completed||day<=completed;
+}
 function timeTaskStatus(task,day){
   if(!task)return '状态未记录';
   if(day>todayStr())return '该日期未到';
   if(task.deletedAt&&matterLocalDay(task.deletedAt)<=day)return '已移除';
-  if(day===todayStr())return task.done?'已完成':'未完成';
+  const snapshot=matterProgressOn(task,day);
+  if(snapshot)return snapshot.status;
   const completedDay=task.done?matterLocalDay(task.completedAt):'';
   if(completedDay&&completedDay<=day)return '已完成';
   const events=timeDayEvents(task);
   const latest=events.filter(event=>matterLocalDay(event.at)<=day).at(-1);
-  if(latest)return latest.action==='完成'?'已完成':'未完成';
+  if(latest)return latest.action==='完成'?'已完成':matterHasStarted(task)?'进行中':'待开始';
   if((task.done&&!completedDay)||events[0]?.action==='重新打开'||matterLocalDay(task.createdAt||task.date)>day)return '状态未记录';
-  return '未完成';
+  const started=matterLocalDay(task.actualStartedAt)||task.progressStartedOn;
+  return started&&started<=day?'进行中':'待开始';
 }
 
 function timeDayData(day,entries=timeEntries(),tasks=timeRecords(S.todos),reviews=timeRecords(S.dailyTimeReviews)){
@@ -4553,8 +4594,9 @@ function timeDayData(day,entries=timeEntries(),tasks=timeRecords(S.todos),review
   const related=new Map();
   tasks.forEach(task=>{
     const scheduled=!task.deletedAt||day<matterLocalDay(task.deletedAt);
-    if((scheduled&&todoDue(task).slice(0,10)===day)||todoCompletedDay(task)===day||
-       timeDayEvents(task).some(event=>matterLocalDay(event.at)===day)){
+    if(matterScheduledOn(task,day)||(scheduled&&!todoStart(task)&&todoDue(task).slice(0,10)===day)||todoCompletedDay(task)===day||
+       timeDayEvents(task).some(event=>matterLocalDay(event.at)===day)||
+       (task.progressHistory||[]).some(event=>event.status!=='待开始'&&matterLocalDay(event.at)===day)){
       related.set(task.id,{task,title:task.text});
     }
   });
@@ -4610,7 +4652,8 @@ function timeBoardFollowups(tasks,day,today){
   if(day>today)return new Set();
   const workedBefore=new Set(timeEntries().filter(entry=>entry.day<day).map(entry=>entry.taskId));
   return new Set(tasks.filter(task=>{
-    if(task.done||(day<today&&timeTaskStatus(task,day)!=='未完成'))return false;
+    if((day===today&&task.done)||!['待开始','进行中'].includes(timeTaskStatus(task,day)))return false;
+    if(todoStart(task)||task.actualStartedAt)return false;
     const due=todoDue(task).slice(0,10);
     if(matterCarriesProgress(task,day))return true;
     if(due)return timeValidDay(due)&&due<day;
@@ -4619,19 +4662,19 @@ function timeBoardFollowups(tasks,day,today){
 }
 
 function timeBoardRow({task,followup=false}){
+  const day=$('#quadrantScope').value==='day'?timeSelectedDay():todayStr(),historic=day!==todayStr(),snapshot=matterProgressOn(task,day);
   const due=todoDue(task).replace('T',' '),minutes=timePlanOf(task).minutes;
-  const overdue=matterIsOverdue(task);
-  const inProgress=!task.done&&matterStoredProgress(task)>0;
-  const status=task.done?'已完成':inProgress?'进行中':overdue?'已逾期':'未完成';
+  const overdue=historic?!!due&&due.slice(0,10)<day:matterIsOverdue(task);
+  const status=timeTaskStatus(task,day),inProgress=status==='进行中';
   const original=followup?' <span class="quadrant-original">原象限：'+TIME_QUADRANTS[timeQuadrant(task)]+'</span>':'';
-  return `<article class="quadrant-task ${task.done?'is-done':''}" data-task-id="${esc(task.id)}">
-    <button type="button" class="matter-check" data-time-action="toggle" aria-label="${task.done?'重新打开':'完成'} ${esc(task.text)}" aria-pressed="${!!task.done}">
-      <span class="matter-check-mark" aria-hidden="true">${task.done?'<svg viewBox="0 0 16 16" fill="none"><path d="m4 8 2.5 2.5L12 5"/></svg>':''}</span>
+  return `<article class="quadrant-task ${status==='已完成'?'is-done':''}" data-task-id="${esc(task.id)}">
+    <button type="button" class="matter-check" data-time-action="toggle" aria-label="${task.done?'重新打开':'完成'} ${esc(task.text)}" ${historic?'disabled':''} aria-pressed="${status==='已完成'}">
+      <span class="matter-check-mark" aria-hidden="true">${status==='已完成'?'<svg viewBox="0 0 16 16" fill="none"><path d="m4 8 2.5 2.5L12 5"/></svg>':''}</span>
     </button>
     <div class="quadrant-task-content"><div class="quadrant-task-title">${esc(task.text)}</div>
-      <div class="quadrant-meta"><span class="${!inProgress&&(followup||overdue)?'quadrant-task-alert':''}">${status}</span>${overdue&&inProgress?' · <span class="quadrant-task-alert">已逾期</span>':''}${matterCategoryOf(task)?' · '+MATTER_CATEGORIES[matterCategoryOf(task)]:''}${due?' · 计划 '+esc(due):''}${minutes?' · 计划用时 '+minutes+' 分钟':''}${original}</div>
-      ${matterProgressMarkup(task)}
-      <div class="quadrant-task-actions"><button type="button" data-time-action="detail">详情 / 分类</button><button type="button" data-time-action="log">记用时</button></div>
+      <div class="quadrant-meta"><span class="${!inProgress&&overdue?'quadrant-task-alert':''}">${status}</span>${overdue&&inProgress?' · 超出计划 '+daysBetween(due.slice(0,10),day)+' 天':''}${todoStart(task)?' · 开始 '+esc(todoStart(task)):''}${matterCategoryOf(task)?' · '+MATTER_CATEGORIES[matterCategoryOf(task)]:''}${due?' · 计划 '+esc(due):''}${minutes?' · 计划用时 '+minutes+' 分钟':''}${original}</div>
+      ${matterProgressMarkup(task,snapshot?.progress??(historic?null:matterProgressOf(task)))}
+      <div class="quadrant-task-actions">${!historic&&!task.done&&!matterHasStarted(task)?'<button type="button" data-time-action="start">开始任务</button>':''}<button type="button" data-time-action="detail">详情 / 分类</button><button type="button" data-time-action="log">记用时</button></div>
     </div>
   </article>`;
 }
@@ -4695,7 +4738,7 @@ function renderTimeBoard(day,data,today){
   const matches={
     pending:task=>!task.done,
     day:task=>data.related.has(task.id)||followups.has(task.id),
-    unscheduled:task=>!todoDue(task),
+    unscheduled:task=>!todoStart(task)&&!todoDue(task),
     all:()=>true
   };
   const tasks=source.filter(matches[scope]);
@@ -4710,7 +4753,7 @@ function renderTimeBoard(day,data,today){
   groups.get('').push(...ordinaryUnclassified);
   const hint={
     pending:`显示 ${tasks.length} 项未完成，其中 ${tasks.filter(task=>!todoDue(task)).length} 项未排期。`,
-    day:`显示 ${tasks.length} 项，含所选日计划、完成、重开或已记用时的任务${followups.size?'，以及跨日跟进':''}。`,
+    day:`显示 ${tasks.length} 项，含已到计划开始日且持续跟进的任务，以及当日完成、更新或记用时的任务。旧任务未设开始日时参考原计划。`,
     unscheduled:`显示 ${tasks.length} 项未排期待办。`,
     all:`显示全部 ${tasks.length} 项待办。`
   };
@@ -4753,7 +4796,7 @@ function renderTimeReview(day,data){
   <section class="quadrant-review-card">
     <div class="quadrant-review-header"><h3>相关任务</h3><span class="quadrant-meta">${day===todayStr()?'当前状态':'所选日期状态'}</span></div>
     ${related.size?`<ul class="quadrant-review-list">${[...related.values()].map(({task,title})=>`<li class="quadrant-entry">
-      <strong>${esc(title||'任务名称未记录')}</strong> <span class="quadrant-meta">${timeTaskStatus(task,day)}</span>
+      <strong>${esc(title||'任务名称未记录')}</strong> <span class="quadrant-meta">${timeTaskStatus(task,day)}</span>${task?' · '+(matterProgressOn(task,day)?matterProgressOn(task,day).progress+'%':'进度未记录'):''}
       ${task&&!task.deletedAt?`<button type="button" data-time-action="detail" data-task-id="${esc(task.id)}">详情</button>`:''}
     </li>`).join('')}</ul>`:'<p class="quadrant-empty">这一天暂无相关任务。</p>'}
   </section>
@@ -4927,7 +4970,7 @@ function timeReport(from,to){
   const days=new Set([...entries.map(entry=>entry.day),...reviews.map(review=>review.id)]);
   for(const task of tasks){
     const due=todoDue(task).slice(0,10);
-    const candidates=[(!task.deletedAt||due<matterLocalDay(task.deletedAt))?due:'',todoCompletedDay(task),...timeDayEvents(task).map(event=>matterLocalDay(event.at))];
+    const candidates=[todoStart(task),matterLocalDay(task.actualStartedAt),matterScheduledOn(task,from)?from:'',matterScheduledOn(task,to)?to:'',(!task.deletedAt||due<matterLocalDay(task.deletedAt))?due:'',todoCompletedDay(task),...timeDayEvents(task).map(event=>matterLocalDay(event.at)),...(task.progressHistory||[]).map(event=>matterLocalDay(event.at))];
     for(const day of candidates){
       if(timeValidDay(day)&&day>=from&&day<=to)days.add(day);
     }
@@ -4937,8 +4980,10 @@ function timeReport(from,to){
   for(const day of [...days].sort()){
     const {logged,related,totals,review}=timeDayData(day,entries,tasks,reviews);
     sections.push(`## ${day}`,'### 相关任务',
-      timeMarkdownTable(['任务 ID','任务','当前象限','计划完成','计划分钟','当日状态'],
-        [...related].map(([id,{task,title}])=>[id,title,task?TIME_QUADRANTS[timeQuadrant(task)]:'',task?todoDue(task).replace('T',' '):'',timePlanOf(task).minutes,timeTaskStatus(task,day)])),
+      timeMarkdownTable(['任务 ID','任务','当前象限','计划开始','实际开始','计划完成','计划分钟','当日状态','当日进度'],
+        [...related].map(([id,{task,title}])=>[id,title,task?TIME_QUADRANTS[timeQuadrant(task)]:'',task?todoStart(task):'',task?.actualStartedAt||'',task?todoDue(task).replace('T',' '):'',timePlanOf(task).minutes,timeTaskStatus(task,day),task?matterProgressOn(task,day)?.progress??'未记录':'未记录'])),
+      '### 进度变更',
+      timeMarkdownTable(['任务 ID','记录时间','状态','完成百分比'],tasks.flatMap(task=>(task.progressHistory||[]).filter(event=>matterLocalDay(event.at)===day).map(event=>[task.id,event.at,event.status,event.progress]))),
       '### 实际用时汇总',
       timeMarkdownTable(['发生时象限','已记录分钟'],TIME_QUADRANT_KEYS.map(key=>[TIME_QUADRANTS[key],totals.get(key)])),
       '### 实际用时明细',
@@ -5037,6 +5082,7 @@ $('#quadrantView').addEventListener('click',event=>{
       focusTimeList(root.querySelector('[data-time-list="'+key+'"]'));
       break;
     }
+    case 'start':matterStart(taskId);break;
     case 'detail':
       openMatter('todo',taskId);
       if($('#matterEditForm'))$('#modalBox').classList.add('quadrant-task-dialog');
@@ -5061,7 +5107,7 @@ function matterRowsHtml(list,grouped=false){
   const groups=new Map();
   list.forEach(item=>{
     const x=item.record,due=todoDue(x).slice(0,10);
-    const label=x.done?'今日已完成':matterIsOverdue(x)?'逾期未完成':!due?'未定时间':due===todayStr()?'今天':due<todayStr()?'逾期未完成':'以后';
+    const label=x.done?'今日已完成':matterHasStarted(x)?'进行中':matterIsOverdue(x)?'逾期未完成':todoStart(x)&&todoStart(x)<=todayStr()?'已到开始日期':!due?'未定时间':due===todayStr()?'今天':due<todayStr()?'逾期未完成':'以后';
     if(!groups.has(label))groups.set(label,[]);groups.get(label).push(item);
   });
   return [...groups].map(([label,items])=>`<h3 class="matter-group-heading">${label}<span>${items.length} 项</span></h3>${items.map(matterRow).join('')}`).join('');
@@ -5102,7 +5148,7 @@ function renderNotes(revealId){
     const source=kind==='todo'?matterSource(x):null;
     const text=[x.text,x.title,x.content,x.details,x.completionNote,...matterReferences(x),source?.content].filter(Boolean).join(' ').toLowerCase();
     if(kw&&!text.includes(kw))return false;
-    const date=by==='completed'?(kind==='todo'?todoCompletedDay(x):''):by==='due'?(kind==='todo'?todoDue(x).slice(0,10):''):matterLocalDay(x.createdAt||x.date||x.updatedAt);
+    const date=by==='start'?(kind==='todo'?todoStart(x):''):by==='completed'?(kind==='todo'?todoCompletedDay(x):''):by==='due'?(kind==='todo'?todoDue(x).slice(0,10):''):matterLocalDay(x.createdAt||x.date||x.updatedAt);
     return !(from||to)||!!date&&(!from||date>=from)&&(!to||date<=to);
   }).sort(matterSort);
   $('#matterResult').textContent=`${({today:'今日与逾期',pending:'全部未完成',notes:'备忘',completed:'已完成',all:'全部事项'})[matterView]} · ${list.length} 条`;
@@ -5127,10 +5173,11 @@ $('#matterCapture').onsubmit=e=>{e.preventDefault();addNote()};
 $('#memoIn').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();addNote()}});
 function addNote(){
   const text=$('#memoIn').value.trim();if(!text)return;
-  const kind=$('#matterCaptureKind').value,date=$('#matterCaptureDate').value,time=$('#matterCaptureTime').value;
+  const kind=$('#matterCaptureKind').value,date=$('#matterCaptureDate').value,time=$('#matterCaptureTime').value,plannedStart=$('#matterCaptureStart').value;
+  if(kind==='todo'&&plannedStart&&date&&plannedStart>date){toast('计划完成不能早于计划开始');return;}
   if(kind==='todo'&&time&&!date){toast('请先选择计划日期，或清除时间');return}
   const matterCategory=$('#matterCaptureCategory').value;
-  const record=kind==='todo'?newMatterTodo(noteTitle(text),date+(date&&time?'T'+time:''),{details:text,matterCategory}):
+  const record=kind==='todo'?newMatterTodo(noteTitle(text),date+(date&&time?'T'+time:''),{details:text,matterCategory,plannedStart}):
     {id:uid(),title:noteTitle(text),content:text,done:false,createdAt:noteTime(),updatedAt:noteTime(),matterCategory};
   (kind==='todo'?S.todos:S.notes).push(record);
   matterView=kind==='todo'?'pending':'notes';matterPage=1;
@@ -5155,7 +5202,7 @@ function matterConvert(id){
   const taskId='note-task:'+id,old=S.todos.find(t=>t.id===taskId);
   let draft;
   if(old?.deletedAt&&old.sourceNoteId===id){draft=structuredClone(old);draft.deletedAt=null;draft.dueAt=todayStr();matterSetDone(draft,false)}
-  else draft=newMatterTodo(n.title||noteTitle(n.content),todayStr(),{id:old?taskId+'-'+uid():taskId,details:n.content||'',sourceNoteId:id,matterCategory:matterCategoryOf(n)});
+  else draft=newMatterTodo(n.title||noteTitle(n.content),todayStr(),{id:old?taskId+'-'+uid():taskId,details:n.content||'',sourceNoteId:id,plannedStart:todayStr(),matterCategory:matterCategoryOf(n)});
   // 先编辑草稿，确认后才写入；取消不会新增或恢复待办。
   openMatter('todo',draft.id,{draft,reveal:true});
 }
@@ -5168,12 +5215,12 @@ function revealArrangedMatter(task){
   goTab('notes',{scrollTo:selector});
   setTimeout(()=>{const row=$(selector);if(row){row.tabIndex=-1;row.focus({preventScroll:true})}},450);
   const due=todoDue(task).slice(0,10);
-  toast(task.done?'已保存，可在已完成列表查看':!due?'已加入首页未排期':due===todayStr()?'已安排到今天，首页待办已更新':`已安排到 ${due}，可在首页${due<todayStr()?'逾期未完成':'后续安排'}查看`);
+  toast(task.done?'已保存，可在已完成列表查看':matterInToday(task)?'已保存，首页待办已更新':!due?'已加入首页未排期':`已安排到 ${due}，可在首页后续安排查看`);
 }
 function openMatter(kind,id,options={}){
   const x=options.draft||(kind==='todo'?liveTodos():liveNotes()).find(x=>x.id===id);if(!x)return;
   const todo=kind==='todo',source=todo?matterSource(x):null,due=todo?todoDue(x):'';
-  const initialPlan=todo?timePlanOf(x):null,initialCategory=matterCategoryOf(x),initialProgress=todo?matterProgressOf(x):null;
+  const initialPlan=todo?timePlanOf(x):null,initialCategory=matterCategoryOf(x),initialProgress=todo?matterProgressOf(x):null,initialStart=todoStart(x);
   const linkable=todo?liveNotes().filter(n=>n.id===x.sourceNoteId||!liveTodos().some(t=>t.id!==id&&t.sourceNoteId===n.id)):[];
   const linked=!todo?liveTodos().find(t=>t.sourceNoteId===id):null;
   modal(`<h4>${options.draft?'安排为待办':todo?'待办详情':'备忘详情'}<button type="button" class="modal-close" id="matterClose" aria-label="关闭">×</button></h4>
@@ -5183,10 +5230,11 @@ function openMatter(kind,id,options={}){
     <label class="matter-field">事项类型<select id="matterEditCategory"><option value="">未设置类型</option>${matterCategoryOptions(initialCategory)}</select></label>
     ${todo?`<label class="matter-field">关联备忘（选填）<select id="matterLinkedNote"><option value="">不关联</option>${linkable.map(n=>`<option value="${esc(n.id)}" ${n.id===x.sourceNoteId?'selected':''}>${esc(n.title||noteTitle(n.content))}</option>`).join('')}</select></label>`:''}
     ${source?`<details class="matter-source"><summary>关联的原备忘：${esc(source.title||noteTitle(source.content))}</summary><p>${esc(source.content||'')}</p><button type="button" id="matterSourceOpen">编辑原备忘</button></details>`:''}
-    ${todo?`<div class="matter-date-fields"><label class="matter-field">计划完成日期<input id="matterDueDate" type="date" value="${esc(due.slice(0,10))}"></label><label class="matter-field">时间（选填）<input id="matterDueTime" type="time" value="${esc(due.slice(11,16))}"></label></div><div class="matter-date-shortcuts" id="matterDueShortcuts"><button type="button" data-days="0">今天</button><button type="button" data-days="1">明天</button><button type="button" data-days="week">本周</button><button type="button" data-days="none">不设时间</button></div>`:''}
+    ${todo?`<div class="matter-date-fields"><label class="matter-field">计划开始日期<input id="matterStartDate" type="date" value="${esc(initialStart)}"></label><label class="matter-field">计划完成日期<input id="matterDueDate" type="date" value="${esc(due.slice(0,10))}"></label><label class="matter-field">时间（选填）<input id="matterDueTime" type="time" value="${esc(due.slice(11,16))}"></label></div><div class="matter-date-shortcuts" id="matterDueShortcuts"><button type="button" data-days="0">今天</button><button type="button" data-days="1">明天</button><button type="button" data-days="week">本周</button><button type="button" data-days="none">不设时间</button></div>`:''}
     ${todo?timePlanMarkup(x):''}
     ${todo?`<label class="matter-field">完成进度（%）<input id="matterProgress" type="number" inputmode="numeric" min="0" max="100" step="1" required value="${initialProgress}"></label><p class="matter-hint">填 100% 即标为完成。部分完成的待办次日继续跟进。</p>`:''}
-    <label class="matter-field">状态<select id="matterStatus"><option value="pending" ${!x.done?'selected':''}>${todo?(matterStoredProgress(x)>0?'进行中':'未完成'):'保留备忘'}</option><option value="done" ${x.done?'selected':''}>${todo?'已完成':'已归档'}</option></select></label>
+    <label class="matter-field">状态<select id="matterStatus"><option value="pending" ${!x.done?'selected':''}>${todo?(matterHasStarted(x)?'进行中':'待开始'):'保留备忘'}</option><option value="done" ${x.done?'selected':''}>${todo?'已完成':'已归档'}</option></select></label>
+    ${todo?`<p class="matter-hint">实际开始：${x.actualStartedAt?esc(matterTimeLabel(x.actualStartedAt)):'未记录'}</p><details class="matter-source"><summary>进度变更记录</summary>${(x.progressHistory||[]).map(event=>`<p>${esc(matterTimeLabel(event.at))} · ${esc(event.status)} · ${event.progress}%</p>`).join('')||'<p>暂无记录</p>'}</details>`:''}
     <label class="matter-field">${todo?'完成说明（选填）':'补充说明（选填）'}<textarea id="matterCompletionNote" rows="2" maxlength="10000">${esc(x.completionNote||'')}</textarea></label>
     <label class="matter-field">${todo?'交付物':'相关资料'}（选填，每行一条链接或路径）<textarea id="matterDeliverables" rows="3" maxlength="20000" placeholder="文档链接、文件路径，或交付说明">${esc(matterReferences(x).join('\n'))}</textarea></label>
     <p class="matter-hint">这里只保存引用；本机路径需在原电脑打开，文件本身不会上传。</p>
@@ -5199,7 +5247,7 @@ function openMatter(kind,id,options={}){
   // 表单使用稳定字段快照检测改动，关闭时不静默保存。
   const snapshot=()=>[...form.querySelectorAll('input,textarea,select')].map(e=>e.value).join('\u0000');
   const original=snapshot();
-  const independentFields=todo?['matterEditCategory','matterProgress','matterStatus']:['matterEditCategory'];
+  const independentFields=todo?['matterEditCategory','matterProgress','matterStatus','matterStartDate']:['matterEditCategory'];
   const baseSnapshot=()=>[...form.querySelectorAll('input,textarea,select')]
     .filter(control=>!control.closest('.quadrant-plan-fields')&&!independentFields.includes(control.id)).map(control=>control.value).join('\u0000');
   const originalBase=baseSnapshot();
@@ -5212,7 +5260,7 @@ function openMatter(kind,id,options={}){
       status.value=progress===100?'done':'pending';
       if(progress<100){
         lastPartial=progress;
-        status.options[0].textContent=progress>0?'进行中':'未完成';
+        status.options[0].textContent=progress>0||matterHasStarted(x)?'进行中':'待开始';
       }
     };
     status.onchange=()=>{input.value=status.value==='done'?100:lastPartial;};
@@ -5224,27 +5272,30 @@ function openMatter(kind,id,options={}){
   if(!todo)$('#matterConvert').onclick=()=>{if(snapshot()!==original){$('#matterEditError').textContent='请先保存修改，再安排待办。';return}matterConvert(id)};
   form.onsubmit=e=>{
     e.preventDefault();const body=$('#matterBody').value.trim(),title=todo?$('#matterTitle').value.trim():noteTitle(body);
-    const date=todo?$('#matterDueDate').value:'',time=todo?$('#matterDueTime').value:'';
+    const date=todo?$('#matterDueDate').value:'',time=todo?$('#matterDueTime').value:'',plannedStart=todo?$('#matterStartDate').value:'';
+    if(plannedStart&&date&&plannedStart>date){$('#matterEditError').textContent='计划完成不能早于计划开始。';return;}
     if(!title||!todo&&!body){$('#matterEditError').textContent='请填写事项名称或备忘正文。';return}
     if(time&&!date){$('#matterEditError').textContent='请先选择计划日期，或清除时间。';return}
     const records=todo?S.todos:S.notes,index=records.findIndex(r=>r.id===id),current=records[index];
     if(!options.draft&&(!current||current.deletedAt)){$('#matterEditError').textContent='这条事项已被移除，请关闭后重新查看。';return}
     const category=$('#matterEditCategory').value,progress=todo?$('#matterProgress').valueAsNumber:null;
-    const progressChanged=todo&&progress!==initialProgress;
+    const progressChanged=todo&&progress!==initialProgress,startChanged=todo&&plannedStart!==initialStart;
     if(!options.draft&&current&&baseSnapshot()===originalBase){
       if(todo)timeSavePlan(current,current,initialPlan);
       if(category!==initialCategory)current.matterCategory=category;
       if(progressChanged)matterSaveProgress(current,progress);
-      if(category!==initialCategory||progressChanged)matterTouch(current);
+      if(startChanged)current.plannedStart=plannedStart;
+      if(category!==initialCategory||progressChanged||startChanged)matterTouch(current);
       persist();closeModal();
       if(options.reveal)revealArrangedMatter(current);else{refreshMatters();toast('事项已保存')}
       return;
     }
     if(todo){timeSavePlan(x,current||x,initialPlan);x.text=title;x.details=body;x.dueAt=date+(date&&time?'T'+time:'');x.sourceNoteId=$('#matterLinkedNote').value;
       if(current&&current!==x&&!options.draft){
-        for(const field of ['done','completedAt','completionEvents','completionProgress','progressStartedOn'])x[field]=current[field];
+        for(const field of ['done','completedAt','completionEvents','completionProgress','progressStartedOn','actualStartedAt','progressHistory'])x[field]=current[field];
       }
       if(progressChanged)matterSaveProgress(x,progress);
+      x.plannedStart=options.draft||startChanged?plannedStart:current?.plannedStart||'';
     }
     else{x.title=title;x.content=body;x.done=$('#matterStatus').value==='done';}
     if(options.draft||category!==initialCategory)x.matterCategory=category;
@@ -5260,6 +5311,7 @@ function openMatter(kind,id,options={}){
 function matterListAction(e){
   const b=e.target.closest('[data-action]'),row=b?.closest('.matter-row');if(!row)return;
   const {kind,id}=row.dataset;
+  if(b.dataset.action==='start')matterStart(id);
   if(b.dataset.action==='toggle')matterToggle(kind,id);
   if(b.dataset.action==='edit')openMatter(kind,id);
   if(b.dataset.action==='delete')matterDelete(kind,id);
@@ -5296,9 +5348,10 @@ $('#matterViews').onclick=e=>{const b=e.target.closest('[data-view]');if(b){matt
 $('#matterSearch').oninput=resetMatterPage;
 ['matterType','matterDateBy','matterFrom','matterTo'].forEach(id=>$('#'+id).onchange=resetMatterPage);
 $('#matterReset').onclick=()=>{$('#matterSearch').value='';$('#matterType').value='all';$('#matterFrom').value='';$('#matterTo').value='';resetMatterPage()};
-$('#matterCaptureKind').onchange=()=>{const todo=$('#matterCaptureKind').value==='todo';$('#matterCapture').classList.toggle('is-todo',todo);$('#matterCaptureDateWrap').hidden=!todo;$('#matterCaptureTimeWrap').hidden=!todo;$('#noteAdd').textContent=todo?'添加待办':'保存备忘'};
+$('#matterCaptureKind').onchange=()=>{const todo=$('#matterCaptureKind').value==='todo';$('#matterCapture').classList.toggle('is-todo',todo);$('#matterCaptureDateWrap').hidden=!todo;$('#matterCaptureStartWrap').hidden=!todo;$('#matterCaptureTimeWrap').hidden=!todo;$('#noteAdd').textContent=todo?'添加待办':'保存备忘'};
 $('#todayOpenMatters').onclick=()=>openMatters('pending');
-$('#todoDueDate').value=todayStr();$('#todoNoDue').onclick=()=>{$('#todoDueDate').value='';$('#todoDueTime').value=''};
+$('#todoStartDate').value=todayStr();$('#matterCaptureStart').value=todayStr();
+$('#todoDueDate').value=todayStr();$('#todoNoDue').onclick=()=>{$('#todoStartDate').value='';$('#todoDueDate').value='';$('#todoDueTime').value=''};
 setInterval(()=>{
   if(document.visibilityState!=='visible'||$('#modalMask').classList.contains('show'))return;
   renderHeader();renderFocusCard();renderTodos();
@@ -6202,11 +6255,18 @@ function mergeState(remote){
   const delIds=new Set(Object.keys(S.habitArchive||{}));
   const mergedTodos=mergeNotesByUpdatedAt(S.todos,remote.todos);
   // Keep time planning metadata independent from edits to the todo's ordinary fields.
+  const localTasks=new Map(timeRecords(S.todos).map(task=>[task.id,task]));
+  const remoteTasks=new Map(timeRecords(remote.todos).map(task=>[task.id,task]));
   const priorPlans=new Map(timeRecords(S.todos).map(task=>[task.id,task.timePlan]));
   const remotePlans=new Map(timeRecords(remote.todos).map(task=>[task.id,task.timePlan]));
   mergedTodos.forEach(task=>{
     const plan=timeNewest(priorPlans.get(task.id),remotePlans.get(task.id));
     if(plan)task.timePlan=plan;
+    const local=localTasks.get(task.id),remoteTask=remoteTasks.get(task.id);
+    const history=timeMergeRecords(local?.progressHistory,remoteTask?.progressHistory);
+    if(history.length)task.progressHistory=history;
+    const starts=[local?.actualStartedAt,remoteTask?.actualStartedAt].filter(value=>noteUpdatedAt(value)!==null&&value);
+    if(starts.length)task.actualStartedAt=starts.sort((a,b)=>noteUpdatedAt(a)-noteUpdatedAt(b))[0];
   });
   for(const field of ['timeEntries','dailyTimeReviews']){
     if(!Array.isArray(remote[field]))continue;
@@ -7005,7 +7065,7 @@ function historyEvents(from,to){
     const date=x.done?(todoCompletedDay(x)||x.date):todoDue(x).slice(0,10)||matterLocalDay(x.createdAt)||x.date;
     const time=x.done&&x.completedAt?new Date(x.completedAt).toLocaleTimeString('zh-CN',{hour12:false}):'';
     const text=[x.text,x.completionNote?'结果：'+x.completionNote:'',...matterReferences(x).map(v=>'交付物：'+v)].filter(Boolean).join(' · ');
-    if(inR(date))ev.push({date,time,kind:'todo',tag:x.done?(x.completedAt?'待办 ✓':'待办 ✓（完成时间未记录）'):'待办 ○',text,done:!!x.done,_src:'todos',_idx:i,_id:x.id});
+    if(inR(date))ev.push({date,time,kind:'todo',tag:x.done?(x.completedAt?'待办 ✓':'待办 ✓（完成时间未记录）'):'待办 · '+matterState(x),text,done:!!x.done,_src:'todos',_idx:i,_id:x.id});
   });
   (S.habits||[]).forEach((h,hi)=>Object.keys(h.history||{}).forEach(d=>{if(inR(d))ev.push({date:d,time:'',kind:'habit',tag:'打卡',text:h.name||'',color:h.color,_src:'habits',_hIdx:hi,_date:d})}));
   (S.ledger||[]).forEach((x,i)=>{if(inR(x.date))ev.push({date:x.date,time:'',kind:'ledger',tag:x.type==='income'?'收入':'支出',text:(x.category||'')+(x.note?' · '+x.note:''),amount:x.amount,type:x.type,_src:'ledger',_idx:i,_id:x.id})});

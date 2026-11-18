@@ -19,7 +19,7 @@ let checks=0;
 const pass=label=>console.log('PASS '+(++checks)+' '+label);
 
 function assertProtectedSource(){
-  const baseline=execFileSync('git',['show','22d7a41417ebf8c8241c2f025c43deebc599921b:app.js'],{encoding:'utf8'}).replace(/\r\n/g,'\n');
+  const baseline=execFileSync('git',['show','5274403c37fb293ffdd1791b4d7a737eb949735d:app.js'],{encoding:'utf8'}).replace(/\r\n/g,'\n');
   const source=fs.readFileSync('app.js','utf8').replace(/\r\n/g,'\n');
   const fromTo=(text,from,to)=>text.slice(text.indexOf(from),to?text.indexOf(to,text.indexOf(from)):undefined);
   const protectedAreas=[
@@ -136,7 +136,9 @@ async function startMock(){
     renderAll();
   },today);
   const scope=scopePage.locator('#quadrantScope'),boardRows=scopePage.locator('#quadrantGrid .quadrant-task');
-  assert.equal(await scope.inputValue(),'pending');
+  assert.equal(await scope.inputValue(),'day');
+  assert.equal(await boardRows.count(),2);
+  await scope.selectOption('pending');
   assert.equal(await boardRows.count(),4);
   assert.match(await scopePage.locator('#quadrantScopeHint').textContent(),/显示 4 项未完成，其中 2 项未排期/);
   assert.equal(await boardRows.getByText('未排期 A').evaluate(el=>el.closest('[data-quadrant]').dataset.quadrant),'1');
@@ -164,7 +166,7 @@ async function startMock(){
   assert.equal(await scope.inputValue(),'pending');
   assert.equal(await boardRows.count(),4);
   await scopePage.context().close();
-  pass('默认四项未完成包含两条已分类未排期任务，各范围互通，复盘日期不改看板范围');
+  pass('默认按开始日期，全部未完成包含两条已分类未排期任务，各范围互通');
 
   const followPage=await newPage(first,{viewport:{width:1440,height:1000}});
   await ready(followPage,first+view);
@@ -203,7 +205,7 @@ async function startMock(){
   const firstCarry=await rows(carry).evaluateAll(nodes=>nodes.map(node=>node.dataset.taskId));
   assert(firstCarry.includes('跨日任务 01'));
   assert.equal(await byId(followPage.locator('#quadrantGrid'),'跨日任务 01').count(),1);
-  assert.equal(await byId(carry,'跨日任务 01').locator('.quadrant-task-alert').textContent(),'已逾期');
+  assert.equal(await byId(carry,'跨日任务 01').locator('.quadrant-task-alert').textContent(),'待开始');
   assert.equal(await byId(carry,'跨日任务 01').locator('.quadrant-original').textContent(),'原象限：重要且紧急');
   assert(await byId(carry,'跨日任务 01').getByText('计划 '+yesterday,{exact:false}).isVisible());
   assert.equal(await followPage.locator('#quadrantGrid').getByText(/尚未排期|昨天已完成|已删除|将来任务/).count(),0);
@@ -212,7 +214,7 @@ async function startMock(){
   const lastCarry=await rows(carry).evaluateAll(nodes=>nodes.map(node=>node.dataset.taskId));
   assert.equal(lastCarry.length,4);
   assert(lastCarry.every(id=>!firstCarry.includes(id)));
-  assert.equal(await byId(carry,'已用时未排期').locator('.quadrant-task-alert').textContent(),'未完成');
+  assert.equal(await byId(carry,'已用时未排期').locator('.quadrant-meta span').first().textContent(),'待开始');
   assert(await byId(carry,'今天待分类').locator('.quadrant-original').count()===0);
   assert(await carry.getByRole('button',{name:'下一页'}).isDisabled());
   if(envOutput){
