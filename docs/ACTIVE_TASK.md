@@ -1,5 +1,17 @@
 # ACTIVE TASK
 
+## 2026-11-18 C「稳步推进」图标 v3.32.0
+
+用户选定 C 并明确授权直接发布。来源为本聊天验收的 `logo-options/logo-c.svg`，发布分支为 `release/logo-c-v3.32.0`，目标为 `main`。
+
+- 正式基线及回滚点 `177752c5946b3df11387e99f3140e326000fe970`。完整回滚 bundle `../prod-rollback-logo-c-177752c.bundle` 已验证。
+- 范围为选定图标的 SVG、ICO、PNG，页面图标声明、手机桌面 manifest、Mock 静态资源白名单和版本说明。
+- 验证覆盖文件尺寸与 ICO 格式、SVG 原稿一致性、子路径资源、手机桌面声明、页面启动和图标 HTTP 响应。
+- 手机系统可能缓存已添加的桌面图标，现有桌面快捷方式的更新行为以系统为准。
+
+---
+
+
 ## 2026-11-18 待办开始日期与历史进度 v3.31.0
 
 用户已验收并确认发布。来源为 `review/task-start-dates` 的 `67a3a86`，发布分支为 `release/task-start-v3.31.0`，目标为 `main`。

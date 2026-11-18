@@ -75,14 +75,14 @@ const server = createServer(async (req, res) => {
   let filePath = decodeURIComponent(pathname);
   if (filePath === '/') filePath = '/index.html';
   // LAN acceptance serves application assets only, never repository metadata.
-  if (!['/index.html', '/app.js', '/styles.css'].includes(filePath)) {
+  if (!['/index.html', '/app.js', '/styles.css', '/favicon.ico', '/site.webmanifest', '/icons/icon.svg', '/icons/favicon-32.png', '/icons/apple-touch-icon.png', '/icons/app-192.png', '/icons/app-512.png'].includes(filePath)) {
     return send(res, 404, { message: 'Not Found' });
   }
   const file = join(root, filePath);
   if (!file.startsWith(root) || !existsSync(file) || !statSync(file).isFile()) {
     return send(res, 404, { message: 'Not Found' });
   }
-  const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+  const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/vnd.microsoft.icon', '.webmanifest': 'application/manifest+json' };
   const headers = { 'Content-Type': types[extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' };
   if (previewOnly && filePath === '/index.html') {
     headers['Content-Security-Policy'] = "default-src 'self'; connect-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'self'";
