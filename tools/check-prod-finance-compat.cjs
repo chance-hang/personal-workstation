@@ -4,6 +4,7 @@ const fs=require('node:fs/promises');
 const path=require('node:path');
 const {spawn}=require('node:child_process');
 const {once}=require('node:events');
+const {isDeepStrictEqual}=require('node:util');
 const {chromium}=require('playwright');
 const backup=process.env.PROD_FINANCE_BACKUP;
 assert(backup,'PROD_FINANCE_BACKUP must point to a previously verified private JSON export');
@@ -11,7 +12,7 @@ let server,browser;
 (async()=>{
  const data=JSON.parse(await fs.readFile(backup,'utf8'));
  assert(Array.isArray(data.ledger));
- const protectedKeys=['ledger','budget','budgetCats','customCats','fundMgr','todos','notes','worklog','habits','moods','learning'];
+ const protectedKeys=['ledger','budget','budgetCats','customCats','ledgerSettingsUpdatedAt','fundMgr','savingsAccounts','savingsEntries','savingsPositions','savingsGoals','savingsPayroll','savingsPayPlans','todos','notes','worklog','habits','moods','learning'];
  const origin='http://127.0.0.1:4235';
  server=spawn(process.execPath,['tools/mock-sync-server.mjs'],{env:{...process.env,PORT:'4235',MOCK_PREVIEW_ONLY:'0',MOCK_BIND_HOST:'127.0.0.1'},stdio:['ignore','pipe','inherit'],windowsHide:true});
  const [ready]=await once(server.stdout,'data',{signal:AbortSignal.timeout(6000)});
@@ -67,14 +68,15 @@ let server,browser;
  await phone.locator('#exportBtn').click();
  const waiting=phone.waitForEvent('download');await phone.locator('#expDl').click();
  const exported=JSON.parse(await fs.readFile(await (await waiting).path(),'utf8'));
- for(const key of protectedKeys)assert.deepEqual(exported[key],data[key],key+' changed in export');
+ for(const key of protectedKeys)assert(isDeepStrictEqual(exported[key],data[key]),key+' changed in export');
  await page.evaluate(()=>{goTab('money');setMoneyView('analysis')});
  const monthSnapshot={
   budget:await page.locator('#budgetTxt').textContent(),
   excluded:await page.locator('#budgetExcl').textContent(),
   excludedIncome:await page.locator('#incomeExcl').textContent()
  };
- assert.match(monthSnapshot.budget,/4,500/);
+ const expectedBudget=process.env.PROD_COMPAT_BUDGET||new Intl.NumberFormat('en-US').format(data.budget);
+ assert(monthSnapshot.budget.includes(expectedBudget),'Budget summary does not match the expected snapshot');
  assert.match(monthSnapshot.excluded,/3,879.92/);
  assert.match(monthSnapshot.excludedIncome,/5,087.47/);
  assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
