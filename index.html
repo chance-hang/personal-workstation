@@ -17,7 +17,7 @@
 <link rel="icon" href="./icons/icon.svg?v=20261118-c" type="image/svg+xml" sizes="any">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png?v=20261118-c" sizes="180x180">
 <link rel="manifest" href="./site.webmanifest?v=20261118-c">
-  <link rel="stylesheet" href="styles.css?v=prod-logo-c-20261118-1">
+  <link rel="stylesheet" href="styles.css?v=prod-expenses-20261119-1">
 </head>
 <body>
 <div class="main-area" id="mainArea">
@@ -245,6 +245,17 @@
             <div class="muted" id="budgetCarry" style="margin-top:2px"></div>
             <div class="muted" id="incomeExcl" style="margin-top:2px;color:var(--income)"></div>
           </div>
+        </div>
+      </div>
+
+      <div class="sec" data-module="expenseAnalysis" id="expenseAnalysisSec">
+        <div class="page-title">年／月支出分析</div>
+        <div class="card ea-card">
+          <div class="ea-filters" id="eaFilters">
+            <label>统计周期<select id="eaMode"><option value="month">按月</option><option value="year">按年</option></select></label>
+            <label id="eaYearField">查看年份<select id="eaYear"></select></label>
+          </div>
+          <div id="eaResults" aria-live="polite"></div>
         </div>
       </div>
 
@@ -653,6 +664,6 @@
 <div class="modal-mask" id="modalMask"><div class="modal" id="modalBox"></div></div>
 
 
-  <script src="app.js?v=prod-logo-c-20261118-1"></script>
+  <script src="app.js?v=prod-expenses-20261119-1"></script>
 </body>
 </html>

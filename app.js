@@ -2455,6 +2455,10 @@ const dateAdd=(ds,n)=>{const d=new Date(ds+'T00:00:00');d.setDate(d.getDate()+n)
 
 /* ============ 升级功能清单 ============ */
 const CHANGELOG=[
+  {version:'v3.34.0',date:'2026-11-19',modules:['账本'],status:'已上线',items:[
+    '分析页新增按月和按年查询支出，分列计入预算、不计入预算和总支出',
+    '根据已结束期间的账单动态计算历史平均及下月、下年预算建议'
+  ]},
   {version:'v3.32.0',date:'2026-11-18',modules:['界面'],status:'已上线',items:[
     '启用「稳步推进」图标，适配浏览器标签页、收藏与手机桌面'
   ]},
@@ -3113,6 +3117,7 @@ const SUBMODULES={
   money:[
     {id:'moneyForm',secId:'moneyFormSec',label:'记一笔',ic:'M12 5v14M5 12h14'},
     {id:'monthOverview',label:'本月概览',ic:'M3 3v18h18M7 14l4-4 3 3 5-5'},
+    {id:'expenseAnalysis',label:'年／月支出分析',ic:'M3 3v18h18M7 17v-5M12 17V8M17 17V5'},
     {id:'catExpense',label:'分类支出',ic:'M21 21H4.6c-.56 0-.84 0-1.05-.11a1 1 0 0 1-.44-.44C3 20.24 3 19.96 3 19.4V3'},
     {id:'flowList',label:'账单明细',ic:'M9 5h11M9 12h11M9 19h11M5 5h.01M5 12h.01M5 19h.01'},
     {id:'fundManager',label:'资金管理',ic:'M3 3h18v18H3zM3 9h18M9 3v18'},
@@ -3161,6 +3166,7 @@ function renderSidebar(tabKey){
   $$('.side-item',list).forEach(it=>{
     it.addEventListener('click',()=>{
       const id=it.dataset.mod,secId=it.dataset.secid;
+      if(tabKey==='money'&&id==='expenseAnalysis')setMoneyView('analysis');
       const sel=secId?'#'+secId:'.sec[data-module="'+id+'"]';
       const t=$(sel);if(!t)return;
       $$('.side-item',list).forEach(x=>x.classList.remove('on'));
@@ -3521,7 +3527,7 @@ $('#focusBudgetToggle').onclick=()=>{
 /* ============ 账本 ============ */
 let curType='expense',curCat=null,curMonth=new Date();
 function renderMoney(){
-  renderCats();renderFlow();renderMonthStat();renderCatChart();renderTodayStat();renderNoteQuickRow();renderFundManager();renderAssets();renderFocusCard();
+  renderCats();renderFlow();renderMonthStat();renderCatChart();renderTodayStat();renderNoteQuickRow();renderFundManager();renderAssets();renderFocusCard();renderExpenseAnalysis();
 }
 /* ============ 资金管理（v3.20.23 demo） ============ */
 const FM_DEFAULT_DIRS=[
@@ -3795,7 +3801,7 @@ function openCatManager(type){
   $('#modalBox').classList.add('wide');
   if(isExp){
     $$('#budgetCatList .budgetSw').forEach(sw=>{
-      sw.onchange=()=>{setCatBudget('expense',sw.dataset.cat,sw.checked);renderCats();renderMonthStat();renderTodayStat();renderFocusCard();renderPies(flowFiltered())};
+      sw.onchange=()=>{setCatBudget('expense',sw.dataset.cat,sw.checked);renderCats();renderMonthStat();renderTodayStat();renderFocusCard();renderPies(flowFiltered());renderExpenseAnalysis()};
     });
     $$('#budgetCatList .del-cat').forEach(x=>x.onclick=()=>deleteCustomCat('expense',x.dataset.del));
   }
@@ -4153,6 +4159,133 @@ $('#flowTo').onchange=()=>{$$('#flowQuick .quick-chip').forEach(b=>b.classList.r
 $('#flowKw').addEventListener('input',()=>renderFlow());
 $$('#flowQuick .quick-chip').forEach(b=>b.onclick=()=>{const[f,t]=rangeOf(b.dataset.r);setFlowRange(f,t,b.dataset.r);renderFlow()});
 $$('#flowType .quick-chip').forEach(b=>b.onclick=()=>{flowKind=b.dataset.t;flowPage=1;$$('#flowType .quick-chip').forEach(x=>x.classList.remove('on'));b.classList.add('on');renderFlow()});
+/* ============ 账本支出分析：按当前预算分类从账单实时计算 ============ */
+function expenseTotals(samples){
+  return samples.reduce((sum,x)=>({
+    included:sum.included+x.included,
+    excluded:sum.excluded+x.excluded
+  }),{included:0,excluded:0});
+}
+
+function expenseAverage(samples,multiplier=1){
+  if(!samples.length)return null;
+  const total=expenseTotals(samples);
+  return {
+    included:Math.round(total.included*multiplier/samples.length),
+    excluded:Math.round(total.excluded*multiplier/samples.length)
+  };
+}
+
+function expenseBudgetSuggestion(samples,multiplier=1){
+  const average=expenseAverage(samples,multiplier);
+  return average&&{
+    included:Math.max(0,average.included),
+    excluded:Math.max(0,average.excluded)
+  };
+}
+
+function expenseHistory(today){
+  const months=new Map(),yearMonths=new Map();
+  for(const entry of S.ledger){
+    if(entry?.type!=='expense'||!Number.isFinite(entry.amount)||!timeValidDay(entry.date)||entry.date>today)continue;
+    const month=entry.date.slice(0,7);
+    if(!months.has(month))months.set(month,{included:0,excluded:0});
+    const key=catInBudget('expense',entry.category)?'included':'excluded';
+    months.get(month)[key]+=Math.round(entry.amount*100);
+  }
+  for(const [month,amounts] of months){
+    const year=month.slice(0,4);
+    if(!yearMonths.has(year))yearMonths.set(year,[]);
+    yearMonths.get(year).push(amounts);
+  }
+  const years=new Map([...yearMonths].map(([year,samples])=>[year,{...expenseTotals(samples),monthCount:samples.length}]));
+  return {months,years};
+}
+
+function expenseAnalysisModel(today){
+  const {months,years}=expenseHistory(today);
+  const thisMonth=today.slice(0,7),thisYear=today.slice(0,4);
+  const [year,month]=thisMonth.split('-').map(Number);
+  const recentStart=fmtDate(new Date(year,month-13,1)).slice(0,7);
+  const closedMonths=[...months.keys()].filter(key=>key<thisMonth).sort().reverse();
+  const closedYears=[...years.keys()].filter(key=>key<thisYear).sort().reverse();
+  const recentMonths=closedMonths.filter(key=>key>=recentStart);
+  const recentYears=closedYears.filter(key=>Number(key)>=year-3&&years.get(key).monthCount===12);
+  const monthlyBudgetKeys=recentMonths.slice(0,3);
+  const nextMonthDate=new Date(year,month,1);
+  const monthName=key=>Number(key.slice(0,4))+'年'+Number(key.slice(5))+'月';
+  return {
+    months,years,thisMonth,thisYear,
+    month:{
+      average:expenseAverage(closedMonths.map(key=>months.get(key))),
+      averageSource:'按全部历史中 '+closedMonths.length+' 个已结束且有支出记录的月份计算',
+      next:nextMonthDate.getFullYear()+'年'+(nextMonthDate.getMonth()+1)+'月',
+      suggestion:expenseBudgetSuggestion(monthlyBudgetKeys.map(key=>months.get(key))),
+      source:monthlyBudgetKeys.length?'过去 12 个已结束月份中，最近 '+monthlyBudgetKeys.length+' 个有记录月份的平均：'+monthlyBudgetKeys.map(monthName).join('、'):'过去 12 个已结束月份暂无支出记录'
+    },
+    year:{
+      average:expenseAverage(closedYears.map(key=>years.get(key))),
+      averageSource:'按全部历史中 '+closedYears.length+' 个已结束且有支出记录的年份计算，年份可能有缺月',
+      next:(year+1)+'年',
+      suggestion:recentYears.length?expenseBudgetSuggestion(recentYears.map(key=>years.get(key))):expenseBudgetSuggestion(recentMonths.map(key=>months.get(key)),12),
+      source:recentYears.length?'近 3 个已结束年份中，按 '+recentYears.join('、')+' 年的年均计算（各有 12 个月记录）':recentMonths.length?'估算：过去 12 个已结束月份中，'+recentMonths.length+' 个有记录月份的平均 × 12':'近期没有足够的历史支出记录'
+    }
+  };
+}
+
+function expenseAmountCells(amounts){
+  if(!amounts)return '<td>—</td><td>—</td><td>—</td>';
+  return [amounts.included,amounts.excluded,amounts.included+amounts.excluded]
+    .map(cents=>`<td>${money(cents/100)}</td>`).join('');
+}
+
+function expenseTable(caption,firstColumn,rows){
+  return `<div class="ea-scroll" tabindex="0" role="region" aria-label="${caption}">
+    <table class="ea-table"><caption>${caption}</caption><thead><tr><th scope="col">${firstColumn}</th>
+    <th scope="col">计入预算</th><th scope="col">不计入预算</th><th scope="col">合计</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function renderExpenseAnalysis(){
+  const result=$('#eaResults');
+  $('#eaFilters').hidden=amountPrivacy;
+  if(amountPrivacy){
+    result.innerHTML='<div class="amount-chart-cover">支出分析已隐藏</div>';
+    return;
+  }
+  if($('#page-money').dataset.moneyView!=='analysis')return;
+  const model=expenseAnalysisModel(todayStr());
+  const {months,years,thisMonth,thisYear}=model;
+  const byMonth=$('#eaMode').value==='month';
+  const yearSelect=$('#eaYear'),selected=yearSelect.value||thisYear;
+  const yearKeys=[...new Set([thisYear,...years.keys()])].sort().reverse();
+  if([...yearSelect.options].map(option=>option.value).join()!==yearKeys.join()){
+    yearSelect.replaceChildren(...yearKeys.map(key=>new Option(key+' 年',key)));
+  }
+  yearSelect.value=yearKeys.includes(selected)?selected:thisYear;
+  $('#eaYearField').hidden=!byMonth;
+  const year=yearSelect.value,period=byMonth?model.month:model.year;
+  const row=(label,amounts,detail='')=>`<tr><th scope="row">${label}${detail?`<small>${detail}</small>`:''}</th>${expenseAmountCells(amounts)}</tr>`;
+  const summary=expenseTable('历史平均与预算建议','指标',
+    row(byMonth?'平均月支出':'平均年支出',period.average)+row(period.next+'预算建议',period.suggestion));
+  const keys=byMonth?Array.from({length:year===thisYear?Number(thisMonth.slice(5)):12},
+    (_,i)=>year+'-'+String(i+1).padStart(2,'0')).reverse():yearKeys;
+  const history=keys.map(key=>{
+    const amounts=(byMonth?months:years).get(key);
+    const ongoing=key===(byMonth?thisMonth:thisYear);
+    const detail=[ongoing?'截至今日':'',!byMonth&&amounts?`有记录 ${amounts.monthCount}/12 月`:'',!amounts?'无记录':''].filter(Boolean).join(' · ');
+    return row(byMonth?Number(key.slice(5))+' 月':key+' 年',amounts,detail);
+  }).join('');
+  result.innerHTML=summary+
+    `<div class="ea-notes"><p>${period.average?period.averageSource:'暂无可计算平均值的已结束期间'}</p>
+    <p>${period.suggestion?'建议依据：':''}${period.source}。</p></div>`+
+    expenseTable(byMonth?year+' 年各月实际支出':'历年实际支出',byMonth?'月份':'年份',history)+
+    '<p class="ea-note">按当前「计入月预算」设置划分历史账单。无支出记录显示为「—」。建议供参考，账本预算仍需手动调整。</p>';
+}
+
+$('#eaMode').onchange=renderExpenseAnalysis;
+$('#eaYear').onchange=renderExpenseAnalysis;
+
 function monthSum(ms){
   let inc=0,exp=0;S.ledger.filter(x=>x.date.startsWith(ms)).forEach(x=>{if(x.type==='income')inc+=x.amount;else exp+=x.amount});
   return{inc,exp};
@@ -7294,6 +7427,7 @@ const MODULES=[
   {id:'todayMoney',name:'今日账目',page:'today'},
   {id:'moneyForm',name:'记一笔',page:'money'},
   {id:'monthOverview',name:'本月概览',page:'money'},
+  {id:'expenseAnalysis',name:'年／月支出分析',page:'money'},
   {id:'catExpense',name:'分类支出',page:'money'},
   {id:'flowList',name:'流水记录',page:'money'},
   {id:'fundManager',name:'资金管理',page:'money'},
@@ -7315,7 +7449,14 @@ function defaultModuleConfig(){return MODULES.map(x=>({id:x.id,visible:true}))}
 function normalizeModules(arr){
   const base=Array.isArray(arr)?arr:[];
   const seen=new Set(base.map(x=>x&&x.id));
-  MODULES.forEach(m=>{if(!seen.has(m.id)){const entry={id:m.id,visible:true};if(m.id==='pomodoro')base.unshift(entry);else base.push(entry)}});
+  MODULES.forEach(m=>{
+    if(seen.has(m.id))return;
+    const entry={id:m.id,visible:true};
+    const before=m.id==='expenseAnalysis'?base.findIndex(x=>x?.id==='catExpense'):-1;
+    if(m.id==='pomodoro')base.unshift(entry);
+    else if(before>=0)base.splice(before,0,entry);
+    else base.push(entry);
+  });
   return base.filter(x=>x&&MODULES.some(m=>m.id===x.id)).map(x=>({id:x.id,visible:!!x.visible}));
 }
 function loadModuleConfig(){
@@ -7389,7 +7530,7 @@ const _sr=$('#storageRestoreBtn');if(_sr)_sr.onclick=restoreLocalSnapshot;
 function syncStickyOffsets(){const hdr=document.querySelector('header.topbar');if(hdr)document.documentElement.style.setProperty('--topbar-h',Math.ceil(hdr.getBoundingClientRect().height)+'px');const sw=$('#moneyViewSwitch');if(sw&&sw.getBoundingClientRect().height)document.documentElement.style.setProperty('--money-switch-h',Math.ceil(sw.getBoundingClientRect().height)+'px')}
 syncStickyOffsets();window.addEventListener('resize',syncStickyOffsets);if(window.ResizeObserver){const _stickyRO=new ResizeObserver(syncStickyOffsets);const _stickyHdr=document.querySelector('header.topbar');if(_stickyHdr)_stickyRO.observe(_stickyHdr)}
 const MONEY_VIEW_KEY='wb_money_view_v1';
-function setMoneyView(v){const page=$('#page-money');if(!page)return;const allowed=['entry','analysis','plan'];if(!allowed.includes(v))v='entry';page.dataset.moneyView=v;try{localStorage.setItem(MONEY_VIEW_KEY,v)}catch(e){}$$('#moneyViewSwitch button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));if($('#page-money').classList.contains('active'))window.scrollTo({top:0,behavior:'auto'})}
+function setMoneyView(v){const page=$('#page-money');if(!page)return;const allowed=['entry','analysis','plan'];if(!allowed.includes(v))v='entry';page.dataset.moneyView=v;try{localStorage.setItem(MONEY_VIEW_KEY,v)}catch(e){}$$('#moneyViewSwitch button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));if(v==='analysis')renderExpenseAnalysis();if($('#page-money').classList.contains('active'))window.scrollTo({top:0,behavior:'auto'})}
 $$('#moneyViewSwitch button').forEach(b=>b.onclick=()=>setMoneyView(b.dataset.v));
 try{setMoneyView(localStorage.getItem(MONEY_VIEW_KEY)||'entry')}catch(e){setMoneyView('entry')}
 const _todayJump=(id,fn)=>{const el=$(id);if(el)el.onclick=fn};
@@ -9172,6 +9313,9 @@ initFilters();
 renderAll();
 if(MOCK_SYNC&&location.hash==='#time-quadrants'){
   goTab('notes');setTimeQuadrantView(true);
+}
+if(MOCK_SYNC&&location.hash==='#expense-analysis'){
+  goTab('money');setMoneyView('analysis');scrollTodayModule('#expenseAnalysisSec');
 }
 
 /* v3.20.3: 学习方向卡全局 click 事件委托（替代 inline onclick，绕开 iOS PWA 缓存断链） */
