@@ -22,7 +22,7 @@ async function open(width){
   await p.clock.setFixedTime(when);
   await p.goto(origin+'/?mockSync=1#savings');
   await p.waitForFunction(()=>syncActive()&&!syncBusy);
-  await p.locator('#svAllocationPlan > summary').click();
+  assert.equal(await p.locator('#svAllocationPlan').evaluate(el=>el.open),true);
   return p;
 }
 
@@ -55,7 +55,7 @@ async function open(width){
   await save(p);
   assert.equal(await p.evaluate(()=>svBalance(fmPocket())),200000);
   assert.match(await text(p,'fmTransferSummary'),/待补回¥200/);
-  await p.locator('#fmRulePanel > summary').click();
+  assert.equal(await p.locator('#fmRulePanel').evaluate(el=>el.open),true);
   await p.locator('#fmAddDir').click();
   await p.locator('#fmDirectionName').fill('固定支出');
   await save(p);

@@ -842,6 +842,42 @@ summary::-webkit-details-marker{color:var(--text)}
 .module-item button{border:1px solid var(--line);border-radius:var(--r-xs);padding:6px 8px;font-size:12px;color:var(--text-2);background:#fff}.module-item button.primary{background:var(--text);color:#fff;border-color:var(--text)}
 .module-empty{border:1px dashed var(--line);border-radius:var(--r);padding:18px;text-align:center;color:var(--text-3);font-size:13px;background:var(--card-soft)}
 
+/* finesse · component: module disclosures · register=product · tokens: inherited */
+[data-fold-panel][data-panel-folded] > :not([data-fold-heading]){display:none!important}
+[data-fold-panel][data-panel-folded] > [data-fold-heading]{margin-bottom:0}
+[data-fold-panel] > [data-fold-heading].page-title{min-height:44px;display:flex;align-items:center}
+[data-fold-panel] > [data-fold-heading] :is(h2,h3,h4,.pie-title){min-width:0}
+.module-fold-toggle{
+  display:inline-flex;align-items:center;gap:6px;min-height:44px;min-width:0;max-width:100%;
+  padding:0 5px 0 0;border:0;border-radius:var(--r-xs);
+  background:transparent;color:inherit;font:inherit;letter-spacing:inherit;text-align:left;cursor:pointer;
+}
+.module-fold-title{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.module-fold-chevron{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.module-fold-toggle[aria-expanded=false] .module-fold-chevron{transform:rotate(-90deg)}
+.module-fold-toggle:focus-visible,.module-fold-tools button:focus-visible,.module-fold-settings select:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+.module-fold-toggle:active{background:var(--bg2)}
+.module-fold-toggle:disabled{cursor:not-allowed}
+@media(hover:hover){.module-fold-toggle:not(:disabled):hover{background:var(--bg2)}}
+details[data-fold-part] > summary{min-height:44px;align-content:center}
+.module-fold-tools{display:flex;justify-content:flex-end;margin-bottom:8px}
+.module-fold-tools button,.module-fold-settings select{
+  min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:var(--r-xs);
+  background:var(--card);color:var(--text);font:inherit;
+}
+.module-fold-tools button{cursor:pointer}
+.module-fold-settings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.module-fold-settings > label{display:grid;gap:5px}
+.module-fold-settings select{width:100%;min-width:0}
+.module-fold-help{margin:0 0 10px;font-size:var(--ui-font-caption)}
+#moduleFoldRows,#moduleFoldStatus{grid-column:1/-1}
+#moduleFoldRows{max-height:min(48dvh,460px);overflow-y:auto;overscroll-behavior:contain;padding:3px}
+.module-fold-row{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(100px,132px);gap:10px;
+  align-items:center;padding:5px 0;border-bottom:1px solid var(--line-soft);
+}
+.module-fold-row span{font-size:var(--ui-font-small);overflow-wrap:anywhere}
+
 /* ====== 通用筛选条 ====== */
 .filter-bar{background:var(--card-soft);border:1px solid var(--line);border-radius:var(--r-sm);padding:11px 12px;margin-bottom:12px}
 .filter-bar .fb-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}

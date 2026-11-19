@@ -59,7 +59,6 @@ initFilters();
 renderAll();
 goTab('money');
 setMoneyView('savings');
-document.getElementById('svAllocationPlan').open=true;
 """.strip())
 notice = '<p><a href="虚拟数据.json" download>下载虚拟数据</a> · <a href="验收说明.md">验收说明</a></p>'
 html = html.replace('<span id="offlinePersistenceNote"></span>', '<span id="offlinePersistenceNote"></span>' + notice)

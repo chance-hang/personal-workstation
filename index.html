@@ -17,7 +17,7 @@
 <link rel="icon" href="./icons/icon.svg?v=20261118-c" type="image/svg+xml" sizes="any">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png?v=20261118-c" sizes="180x180">
 <link rel="manifest" href="./site.webmanifest?v=20261118-c">
-  <link rel="stylesheet" href="styles.css?v=review-payroll-pocket-20261119-1">
+  <link rel="stylesheet" href="styles.css?v=review-module-folds-20261119-1">
 </head>
 <body>
 <div class="main-area" id="mainArea">
@@ -61,7 +61,9 @@
     <input type="file" id="mergeFile" accept="application/json" hidden>
     <!-- 今日 -->
     <section class="page active" id="page-today">
-      <div class="focus">
+      <div class="sec" data-fold-part="todayOverview">
+        <div class="page-title">今日概览</div>
+        <div class="focus">
         <div class="f-item">
           <div class="f-lab"><span class="dot" style="background:var(--expense)"></span>今日支出</div>
           <div class="f-num ex" id="focusExp">—</div>
@@ -79,6 +81,7 @@
           <div class="f-sub" id="focusDynamicBudget" title="剩余月预算 ÷ 含今天的剩余天数，不超过固定日预算；沿用账本的上月超支结转">动态日预算 —</div>
           <div class="f-sub" id="focusFixedBudget" title="月预算 ÷ 当月天数">固定日预算 —</div>
         </div>
+      </div>
       </div>
       <div class="today-actions" aria-label="今日快捷操作">
         <button class="today-action" id="todayGoPomodoro">◷ 专注</button>
@@ -134,7 +137,7 @@
               <div><strong id="pomoMinutes">0 分钟</strong><span>今日累计专注</span></div>
               <div><strong id="pomoTaskCount">0</strong><span>投入过的任务</span></div>
             </div>
-            <details class="pomo-settings" id="pomoSettings">
+            <details class="pomo-settings" id="pomoSettings" data-fold-part="pomodoroSettings">
               <summary>调整节奏 <span>默认 25 / 5 / 15 分钟</span></summary>
               <form id="pomoSettingsForm">
                 <div class="pomo-settings-grid">
@@ -212,14 +215,14 @@
       </div>
       <div class="sec" id="savingsSec" data-module="savings">
         <div class="page-title">存款记录</div>
-        <div class="card sv-shell">
+        <div class="card sv-shell" data-fold-part="savingsBalances">
           <div class="sv-heading"><h3>账户余额</h3><button type="button" class="sv-button" id="svAddAccount">＋ 账户</button></div>
           <div class="sv-total"><span>当前总存款</span><strong id="svTotal">¥0</strong><small id="svAsOf"></small></div>
           <div id="svIntegrity" class="sv-error" role="status" hidden></div>
           <div id="svAccounts"></div>
           <p class="sv-hint">只记录现金、银行卡、微信、支付宝等余额。与日常收支独立，账户互转不算新增存款。</p>
         </div>
-        <details class="card sv-shell sv-rules fm-workflow" id="svAllocationPlan">
+        <details class="card sv-shell sv-rules fm-workflow" id="svAllocationPlan" data-fold-part="payrollPlan">
           <summary>发薪分配计划</summary>
           <div class="fm-section">
             <div class="sv-heading"><h4 id="fmMonth"></h4><button type="button" class="sv-button" id="fmSetPocket">选小荷包</button></div>
@@ -232,9 +235,9 @@
             <div id="fmTransferSummary" class="fm-summary"></div>
             <button type="button" class="sv-button sv-primary" id="fmCalc">设为本月目标</button>
             <div class="sv-actions fm-actions"><button type="button" class="sv-button" id="fmRecordIn">记小荷包转入</button><button type="button" class="sv-button" id="fmRecordOut">记应急取用</button></div>
-            <details class="sv-rules" id="fmBreakdown" hidden><summary>查看分配明细</summary><div id="fmResultGrid" class="fm-result"></div></details>
+            <details class="sv-rules" id="fmBreakdown" data-fold-part="payrollBreakdown" hidden><summary>查看分配明细</summary><div id="fmResultGrid" class="fm-result"></div></details>
           </div>
-          <details class="sv-rules fm-section" id="fmRulePanel">
+          <details class="sv-rules fm-section" id="fmRulePanel" data-fold-part="payrollRules">
             <summary>管理分配规则</summary>
             <p class="sv-hint">固定金额和工资比例先计算，剩余款最后分配。</p>
             <div id="fmRules"></div>
@@ -243,18 +246,18 @@
             <div id="fmDirs"></div>
             <button type="button" class="sv-button" id="fmAddDir">＋ 方向</button>
           </details>
-          <details class="sv-rules fm-section" id="fmHistory">
+          <details class="sv-rules fm-section" id="fmHistory" data-fold-part="payrollHistory">
             <summary>月度计划记录</summary>
             <div id="fmHistoryList"></div>
           </details>
         </details>
-        <div class="card sv-shell" id="svGoalsCard">
+        <div class="card sv-shell" id="svGoalsCard" data-fold-part="savingsGoals">
           <div class="sv-heading"><h3>存钱目标</h3><button type="button" class="sv-button" id="svEditGoals">设置目标</button></div>
           <div id="svGoals"></div>
           <p class="sv-hint" id="svGoalsHint">净存入按存入减取出计算，全部账户互转相抵。目标进度截至今天。</p>
-          <details class="sv-rules" id="svLegacyGoals" hidden><summary>旧目标记录</summary><p id="svLegacyGoalsText" class="sv-hint"></p></details>
+          <details class="sv-rules" id="svLegacyGoals" data-fold-part="legacySavingsGoals" hidden><summary>旧目标记录</summary><p id="svLegacyGoalsText" class="sv-hint"></p></details>
         </div>
-        <div class="card sv-shell" id="svWealthCard">
+        <div class="card sv-shell" id="svWealthCard" data-fold-part="savingsWealth">
           <h3>资产与负债</h3>
           <p id="svWealthHint" class="sv-hint"></p>
           <div id="svWealth" class="sv-stats"></div>
@@ -263,11 +266,11 @@
           <div id="svOtherAssets"></div>
           <div class="sv-heading"><h4>负债明细</h4><button type="button" class="sv-button" id="svAddDebt">＋ 负债</button></div>
           <div id="svDebts"></div>
-          <details class="sv-rules" id="svLinkedDetails" hidden><summary>已关联或暂不计入的旧资产</summary><div id="svLinkedAssets"></div></details>
+          <details class="sv-rules" id="svLinkedDetails" data-fold-part="linkedSavingsAssets" hidden><summary>已关联或暂不计入的旧资产</summary><div id="svLinkedAssets"></div></details>
           <h4>资产配置</h4><div id="svAllocation"></div>
           <div id="svLegacyAssets"></div>
         </div>
-        <div class="card sv-shell">
+        <div class="card sv-shell" data-fold-part="savingsEntry">
           <h3>记一笔</h3>
           <p id="svEntryHint" class="sv-hint"></p>
           <form id="svEntryForm" class="sv-form">
@@ -281,7 +284,7 @@
             <button class="sv-button sv-primary sv-full" type="submit" id="svSave">保存流水</button>
           </form>
         </div>
-        <div class="card sv-shell">
+        <div class="card sv-shell" data-fold-part="savingsStats">
           <h3>月度与年度统计</h3>
           <div class="sv-query">
             <label>统计方式<select id="svMode"><option value="month">按月</option><option value="year">按年</option></select></label>
@@ -291,9 +294,9 @@
           <p id="svPeriodHint" class="sv-hint" role="status"></p>
           <div id="svStats" class="sv-stats"></div>
           <div id="svMonths"></div>
-          <details class="sv-rules"><summary>统计口径</summary><p>期末余额＝期初余额＋期间新增起始余额＋存入－取出＋互转净额。净存入＝存入－取出。起始余额单列，全部账户的互转相抵。余额按截至日期的已录流水计算，并非银行实时余额。</p><p>补录、修改或删除历史流水，会重新计算相关月份。尚未建立账户的期间显示“未记录”，未来月份不预估余额。</p></details>
+          <details class="sv-rules" data-fold-part="savingsStatGuide"><summary>统计口径</summary><p>期末余额＝期初余额＋期间新增起始余额＋存入－取出＋互转净额。净存入＝存入－取出。起始余额单列，全部账户的互转相抵。余额按截至日期的已录流水计算，并非银行实时余额。</p><p>补录、修改或删除历史流水，会重新计算相关月份。尚未建立账户的期间显示“未记录”，未来月份不预估余额。</p></details>
         </div>
-        <div class="card sv-shell">
+        <div class="card sv-shell" data-fold-part="savingsFlows">
           <div class="sv-heading"><h3>流水查询</h3><span class="sv-hint" id="svFlowCount"></span></div>
           <div class="sv-query">
             <label>类型<select id="svFlowKind"><option value="">全部类型</option><option value="deposit">存入</option><option value="withdraw">取出</option><option value="transfer">账户互转</option></select></label>
@@ -361,7 +364,8 @@
 
       <div class="sec" data-module="flowList">
         <div class="page-title">账单明细 · 流水记录</div>
-        <div class="card">
+        <div class="card" data-fold-part="flowFilters">
+          <h3>筛选账单</h3>
           <div class="filter-bar">
             <div class="fb-row">
               <span class="fb-lab">日期</span>
@@ -392,7 +396,7 @@
             <div class="filter-sum" id="flowSum"></div>
           </div>
         </div>
-        <div class="card">
+        <div class="card" data-fold-part="flowTotalPie">
           <div class="pie-title-row"><span class="pie-title">总支出构成</span><span class="muted pie-sub">点图例可多选高亮对比</span></div>
           <div class="pie-ctl quick-chips" id="pieDimRow">
             <span class="pc-lab">维度</span>
@@ -410,7 +414,7 @@
           <div class="pie-focus" id="pieFocusBar" style="display:none">已选「<b id="pieFocusName"></b>」<span class="pf-apply" id="pieApplyFilter" style="display:none">筛选到明细</span><span class="x" id="pieFocusClear">×</span></div>
           <div class="muted" style="margin-top:10px" id="flowPieHint">饼图随「日期 / 收支 / 关键词」实时变化；切「按备注」可看每条备注花了多少钱，再用「限定」把范围收窄到某个分类；「按分类」时点图例右侧 ⤵ 可直接下钻该分类的备注构成；最近更新 <span id="pieStamp" class="muted">—</span></div>
         </div>
-        <div class="card">
+        <div class="card" data-fold-part="flowBudgetPie">
           <div class="pie-title-row"><span class="pie-title">预算内支出构成</span><span class="muted pie-sub">仅含「计入月预算」的类型 · 维度跟随上方</span></div>
           <div class="pie-wrap">
             <div id="flowPieBudget" class="pie-svg"></div>
@@ -419,7 +423,8 @@
           <div class="pie-focus" id="pieBudgetFocusBar" style="display:none">已选「<b id="pieBudgetFocusName"></b>」<span class="x" id="pieBudgetFocusClear">×</span></div>
           <div class="muted" style="margin-top:10px">只统计你在「支出类型管理」中开启「计入月预算」的类型；点图例同样可多选高亮对比</div>
         </div>
-        <div class="card">
+        <div class="card" data-fold-part="flowRows">
+          <h3>流水列表</h3>
           <div id="flowList"></div>
         </div>
       </div>
@@ -529,7 +534,7 @@
           <button type="button" id="matterListTab" class="on" aria-controls="matterListView" aria-pressed="true">事项列表</button>
           <button type="button" id="quadrantTab" aria-controls="quadrantView" aria-pressed="false">四象限时间管理</button>
         </div>
-        <div class="card matters-workbench" id="matterListView">
+        <div class="card matters-workbench" id="matterListView" data-fold-part="mattersList">
           <div class="matters-heading"><div><h2>记录与安排</h2><p>随手记录，安排时间，追溯结果。</p></div><span id="noteCount" aria-live="polite"></span></div>
           <form id="matterCapture" class="matter-capture">
             <label for="memoIn" class="matter-label">随手记录</label>
@@ -539,7 +544,7 @@
           </form>
           <div class="matter-tabs" id="matterViews" role="group" aria-label="事项视图"><button type="button" data-view="pending" class="on" aria-pressed="true">未完成</button><button type="button" data-view="today">今日</button><button type="button" data-view="notes">备忘</button><button type="button" data-view="completed">已完成</button><button type="button" data-view="all">全部</button></div>
           <label class="matter-search" for="matterSearch"><span>搜索</span><input id="matterSearch" type="search" placeholder="事项、正文、完成说明或交付物"></label>
-          <details class="matter-filters"><summary>按类型与时间筛选</summary><div class="matter-filter-grid"><label>类型<select id="matterType"><option value="all">全部类型</option><option value="todo">待办</option><option value="note">备忘</option></select></label><label>时间依据<select id="matterDateBy"><option value="due">计划完成</option><option value="start">计划开始</option><option value="created">记录时间</option><option value="completed">实际完成</option></select></label><label>开始日期<input id="matterFrom" type="date"></label><label>结束日期<input id="matterTo" type="date"></label><button type="button" id="matterReset">清除筛选</button></div></details>
+          <details class="matter-filters" data-fold-part="matterFilters"><summary>按类型与时间筛选</summary><div class="matter-filter-grid"><label>类型<select id="matterType"><option value="all">全部类型</option><option value="todo">待办</option><option value="note">备忘</option></select></label><label>时间依据<select id="matterDateBy"><option value="due">计划完成</option><option value="start">计划开始</option><option value="created">记录时间</option><option value="completed">实际完成</option></select></label><label>开始日期<input id="matterFrom" type="date"></label><label>结束日期<input id="matterTo" type="date"></label><button type="button" id="matterReset">清除筛选</button></div></details>
           <div class="matter-list-heading"><span id="matterResult" tabindex="-1" aria-live="polite"></span><span>点“详情”补充说明与交付物</span></div>
           <div id="noteList" class="matter-list"></div>
           <div id="matterPagination" class="matter-pagination" role="group" aria-label="事项列表分页" hidden>
@@ -548,7 +553,7 @@
             <button type="button" id="matterNextPage" aria-controls="noteList">下一页</button>
           </div>
         </div>
-        <section id="quadrantView" class="quadrant-workbench" aria-labelledby="quadrantHeading" hidden>
+        <section id="quadrantView" data-fold-part="quadrants" class="quadrant-workbench" aria-labelledby="quadrantHeading" hidden>
           <div class="quadrant-toolbar">
             <h2 id="quadrantHeading">四象限时间管理</h2>
             <div class="quadrant-actions">
@@ -602,6 +607,7 @@
 
     <!-- 我的 -->
     <section class="page" id="page-me">
+      <div class="module-fold-tools"><button type="button" id="moduleFoldSettingsBtn">折叠设置</button></div>
       <div class="sec" data-module="dataManage">
         <div class="page-title">数据管理</div>
         <div class="card">
@@ -612,7 +618,9 @@
           <div class="set-row"><span class="lab">清空全部</span><button id="clearBtn" style="color:var(--bad)">清空</button></div>
           <div class="set-row"><span class="lab">模块显示与排序</span><button id="moduleManageBtn">编辑模块</button></div>
         </div>
-        <div class="page-title" style="margin-top:14px">数据安全与容量</div>
+      </div>
+      <div class="sec" data-module="storageHealth">
+        <div class="page-title">数据安全与容量</div>
         <div class="card">
           <div class="storage-health-grid">
             <div class="storage-health-item"><b id="storageDataSize">—</b><span>当前数据</span></div>
@@ -704,6 +712,6 @@
 <div class="modal-mask" id="modalMask"><div class="modal" id="modalBox"></div></div>
 
 
-  <script src="app.js?v=review-payroll-pocket-20261119-1"></script>
+  <script src="app.js?v=review-module-folds-20261119-1"></script>
 </body>
 </html>

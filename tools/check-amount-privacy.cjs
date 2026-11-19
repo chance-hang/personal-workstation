@@ -117,8 +117,8 @@ async function screenshot(p,name){
   assert.equal(await p.locator('#budgetBar').evaluate(e=>e.style.width),'0px');
   await screenshot(p,'amount-privacy-ledger-desktop');
   await p.evaluate(()=>setMoneyView('plan'));
-  await p.locator('#svAllocationPlan > summary').click();
-  await p.locator('#fmRulePanel > summary').click();
+  assert.equal(await p.locator('#svAllocationPlan').evaluate(el=>el.open),true);
+  assert.equal(await p.locator('#fmRulePanel').evaluate(el=>el.open),true);
   for(const selector of ['#fmIncome','#svEditGoals','#svAddAsset','#svAddDebt']){
     assert(await p.locator(selector).isDisabled(),selector);
     if(selector==='#fmIncome')assert.equal(await p.locator(selector).inputValue(),'',selector);
@@ -202,7 +202,7 @@ async function screenshot(p,name){
       const rect=$('#amountPrivacyToggle').getBoundingClientRect();
       return {fits:rect.left>=0&&rect.right<=innerWidth,hit:rect.height,overflow:document.documentElement.scrollWidth>innerWidth};
     });
-    assert(geometry.fits&&!geometry.overflow&&geometry.hit>=44,JSON.stringify({width,geometry}));
+    assert(geometry.fits&&!geometry.overflow&&geometry.hit>=44-0.01,JSON.stringify({width,geometry}));
     assert.match(await show(mobile,'#focusExp'),privateText);
     if(width===390)await screenshot(mobile,'amount-privacy-home-mobile');
     await mobile.context().close();

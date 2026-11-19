@@ -107,7 +107,7 @@ async function makePage(width,mobile=false){
   await p.locator('#matterSearch').fill('');
   assert.equal(await status.innerText(),'第 1 / 3 页 · 1–10 条');
   await next.click();
-  await p.locator('.matter-filters summary').click();
+  assert.equal(await p.locator('.matter-filters').evaluate(el=>el.open),true);
   await p.locator('#matterDateBy').selectOption('created');
   await p.locator('#matterFrom').fill('2026-11-16');
   assert.equal(await status.innerText(),'第 1 / 2 页 · 1–10 条');

@@ -3211,6 +3211,7 @@ const SUBMODULES={
   ],
   me:[
     {id:'dataManage',label:'数据管理',ic:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3'},
+    {id:'storageHealth',label:'数据安全与容量',ic:'M12 22S4 18 4 12V5l8-3 8 3v7c0 6-8 10-8 10zM9 12l2 2 4-4'},
     {id:'lnOrganize',label:'学习资料整理',ic:'M3 6h18M3 12h18M3 18h18'},
     {id:'cloudSync',label:'云同步',ic:'M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z'},
     {id:'homeScreen',label:'添加到手机主屏',ic:'M12 17v5M5 12l7-7 7 7M19 21H5'},
@@ -3238,11 +3239,12 @@ function renderSidebar(tabKey){
     it.addEventListener('click',()=>{
       const id=it.dataset.mod,secId=it.dataset.secid;
       if(tabKey==='money'){
-        if(id==='expenseAnalysis')setMoneyView('analysis');
-        else if(id==='savings'||$('#page-money').dataset.moneyView==='savings')setMoneyView(id==='savings'?'savings':['fundManager','assets'].includes(id)?'savings':['catExpense','flowList'].includes(id)?'analysis':'entry');
+        if(['expenseAnalysis','catExpense','flowList'].includes(id))setMoneyView('analysis');
+        else if(id==='savings')setMoneyView('savings');
+        else if(id==='moneyForm'||$('#page-money').dataset.moneyView==='savings')setMoneyView('entry');
       }
       const sel=secId?'#'+secId:'.sec[data-module="'+id+'"]';
-      const t=$(sel);if(!t)return;
+      const t=$(sel);if(!revealModuleTarget(t))return;
       $$('.side-item',list).forEach(x=>x.classList.remove('on'));
       it.classList.add('on');
       /* 滚动到 .sec，避开顶栏遮挡 */
@@ -3279,11 +3281,12 @@ $$('nav.tabbar a').forEach(a=>a.addEventListener('click',()=>{
   if(a.dataset._forceScroll){
     const sel=a.dataset._forceScroll;
     delete a.dataset._forceScroll;
+    revealModuleTarget($(sel));
     /* ① 立即从 0 开始 */
     try{window.scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0;}catch(e){}
     /* 拿到目标的 offsetTop（相对文档）后多次跳到那里 */
     const scrollToTarget=(behavior)=>{
-      const t=$(sel);if(!t)return;
+      const t=$(sel);if(!t?.closest('.page.active')||!t.getClientRects().length)return;
       const rect=t.getBoundingClientRect();
       /* 关键：减去 sticky 顶栏高度，否则卡片顶部被顶栏遮住（E2E 实测 rectTop=0 vs 顶栏底 107px） */
       const hdr=document.querySelector('header.topbar');
@@ -3989,7 +3992,7 @@ function svRenderWealth(){
   $$('#svWealthCard [data-position-edit]').forEach(button=>button.onclick=()=>svPositionDialog(button.dataset.positionEdit));
   $$('#svWealthCard [data-position-delete]').forEach(button=>button.onclick=()=>svDeletePosition(button.dataset.positionDelete));
   $$('#svWealthCard [data-position-review]').forEach(button=>button.onclick=()=>svPositionDialog(null,'asset',button.dataset.positionReview));
-  $$('#svWealthCard button').forEach(button=>button.disabled=amountPrivacy);
+  $$('#svWealthCard button:not([data-fold-toggle])').forEach(button=>button.disabled=amountPrivacy);
 }
 function svGoals(){
   if(S.savingsGoals)return S.savingsGoals;
@@ -5486,6 +5489,7 @@ function setTimeQuadrantView(on){
   $('#quadrantView').hidden=!on;
   timeSetPressed($('#matterListTab'),!on);
   timeSetPressed($('#quadrantTab'),on);
+  revealModuleTarget(on?$('#quadrantView'):$('#matterListView'));
   if(on)renderTimeQuadrants();
 }
 
@@ -8181,6 +8185,8 @@ const MODULES=[
   {id:'notes',name:'事项 · 待办与备忘',page:'notes'},
   {id:'learning',name:'学习',page:'learning'},
   {id:'dataManage',name:'数据管理',page:'me'},
+  {id:'storageHealth',name:'数据安全与容量',page:'me'},
+  {id:'lnOrganize',name:'学习资料整理',page:'me'},
   {id:'cloudSync',name:'云同步',page:'me'},
   {id:'homeScreen',name:'添加到手机主屏幕',page:'me'},
   {id:'changelog',name:'更新日志',page:'me'},
@@ -8193,7 +8199,8 @@ function normalizeModules(arr){
   MODULES.forEach(m=>{
     if(seen.has(m.id))return;
     const entry={id:m.id,visible:true};
-    const before=m.id==='expenseAnalysis'?base.findIndex(x=>x?.id==='catExpense'):-1;
+    const anchor={expenseAnalysis:'catExpense',storageHealth:'cloudSync',lnOrganize:'cloudSync'}[m.id];
+    const before=anchor?base.findIndex(x=>x?.id===anchor):-1;
     if(m.id==='pomodoro')base.unshift(entry);
     else if(before>=0)base.splice(before,0,entry);
     else base.push(entry);
@@ -8239,7 +8246,7 @@ function applyModuleLayout(){
 function openModuleManager(){
   const rows=moduleCfg.map((c,i)=>{
     const m=MODULES.find(x=>x.id===c.id);
-    const pageName=m.page==='today'?'今日':m.page==='money'?'账本':m.page==='heat'?'热力':m.page==='history'?'历史':m.page==='notes'?'事项':'我的';
+    const pageName=TAB_LABELS[m.page];
     return '<div class="module-item '+(c.visible?'':'off')+'" data-id="'+c.id+'">'
       +'<button class="primary" data-act="toggle">'+(c.visible?'显示':'隐藏')+'</button>'
       +'<div class="mi-main"><div class="mi-title">'+esc(m.name)+'</div><div class="mi-meta">'+pageName+' 页</div></div>'
@@ -8266,6 +8273,143 @@ function openModuleManager(){
   $('#moduleDoneBtn').onclick=()=>{closeModal();applyModuleLayout();toast('模块布局已保存')};
 }
 $('#moduleManageBtn').onclick=openModuleManager;
+
+/* 折叠只控制当前设备的界面；模块显示/排序和业务数据走原有路径。 */
+const MODULE_FOLD_KEY='lifeworkbench_module_folds_v1';
+const MODULE_FOLD_SELECTOR='[data-module],[data-fold-part]';
+const moduleFoldPanels=new Map();
+function readModuleFoldPrefs(){
+  try{
+    const stored=JSON.parse(localStorage.getItem(MODULE_FOLD_KEY));
+    const overrides=Object.entries(stored?.overrides||{}).filter(([key,value])=>
+      /^[a-z][a-zA-Z0-9]+$/.test(key)&&(value==='open'||value==='closed'));
+    return {global:stored?.global==='closed'?'closed':'open',overrides:Object.fromEntries(overrides)};
+  }catch(e){return {global:'open',overrides:{}}}
+}
+let moduleFoldPrefs=readModuleFoldPrefs(),moduleFoldSettingsPage='today';
+function foldPanelId(el){return el.dataset.module||el.dataset.foldPart}
+function foldDefaultOpen(id){
+  return (moduleFoldPrefs.overrides[id]||moduleFoldPrefs.global)!=='closed';
+}
+function setModulePanelOpen(panel,open){
+  if(!panel)return;
+  if(panel.native){panel.el.open=open;return;}
+  if(!open&&panel.id==='pomodoro'&&document.body.classList.contains('pomo-focus'))return;
+  if(!open&&panel.el.contains(document.activeElement)&&!panel.header.contains(document.activeElement)){
+    panel.button.focus({preventScroll:true});
+  }
+  panel.el.toggleAttribute('data-panel-folded',!open);
+  panel.button.setAttribute('aria-expanded',String(open));
+}
+function applyModuleFoldDefaults(){
+  for(const panel of moduleFoldPanels.values())setModulePanelOpen(panel,foldDefaultOpen(panel.id));
+}
+function revealModuleTarget(target){
+  if(!target||target.closest('[data-module]')?.style.display==='none')return false;
+  for(let el=target;el;el=el.parentElement){
+    if(el.matches(MODULE_FOLD_SELECTOR))setModulePanelOpen(moduleFoldPanels.get(foldPanelId(el)),true);
+  }
+  return true;
+}
+function initModuleFolds(){
+  const headings=':scope > :is(.page-title,.sv-heading,.matters-heading,.quadrant-toolbar,.pie-title-row,h3,h4)';
+  for(const el of $$('.page :is('+MODULE_FOLD_SELECTOR+')')){
+    const id=foldPanelId(el),page=el.closest('.page')?.id.slice(5),native=el.tagName==='DETAILS';
+    const header=el.querySelector(native?':scope > summary':headings);
+    if(!header||!page||moduleFoldPanels.has(id))continue;
+    const title=header.querySelector('h2,h3,h4,.pie-title')||header;
+    const textNodes=[...title.childNodes].filter(node=>node.nodeType===Node.TEXT_NODE);
+    const name=textNodes.map(node=>node.textContent).join('').trim()||title.textContent.trim();
+    const parent=el.parentElement.closest('[data-module]');
+    const prefix=el.dataset.foldPart&&parent?.dataset.module==='savings'?'存款 · ':
+      el.dataset.foldPart&&parent?.dataset.module==='flowList'?'账单 · ':'';
+    const panel={id,page,el,native,header,name:prefix+name};
+    if(!native){
+      el.dataset.foldPanel='';
+      header.dataset.foldHeading='';
+      const button=document.createElement('button');
+      button.type='button';
+      button.className='module-fold-toggle';
+      button.dataset.foldToggle=id;
+      const label=document.createElement('span');
+      label.className='module-fold-title';
+      label.textContent=name;
+      button.innerHTML='<svg class="module-fold-chevron" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m6 8 4 4 4-4"/></svg>';
+      button.prepend(label);
+      const controls=[...el.children].filter(child=>child!==header).map((child,index)=>{
+        if(!child.id)child.id='module-fold-'+id+'-'+index;
+        return child.id;
+      });
+      if(controls.length)button.setAttribute('aria-controls',controls.join(' '));
+      textNodes.forEach(node=>node.remove());
+      title.prepend(button);
+      panel.button=button;
+      button.onclick=()=>setModulePanelOpen(panel,el.hasAttribute('data-panel-folded'));
+    }
+    moduleFoldPanels.set(id,panel);
+  }
+  applyModuleFoldDefaults();
+}
+function saveModuleFoldPrefs(){
+  try{
+    localStorage.setItem(MODULE_FOLD_KEY,JSON.stringify(moduleFoldPrefs));
+    return true;
+  }catch(e){return false}
+}
+function moduleFoldSelectOptions(current,inherit=false){
+  const options=inherit?[['inherit','跟随全局']]:[];
+  options.push(['open','默认展开'],['closed','默认折叠']);
+  return options.map(([value,label])=>'<option value="'+value+'"'+(current===value?' selected':'')+'>'+label+'</option>').join('');
+}
+function openModuleFoldSettings(){
+  const trigger=$('#moduleFoldSettingsBtn');
+  const pages=Object.entries(TAB_LABELS).map(([key,label])=>'<option value="'+key+'">'+label+'</option>').join('');
+  modal('<h4 id="moduleFoldHeading">折叠设置</h4>'
+    +'<p class="muted module-fold-help">默认状态在打开工作台时生效。点模块标题可以临时展开或折叠。</p>'
+    +'<div class="module-fold-settings">'
+    +'<label for="moduleFoldGlobal">全局默认<select id="moduleFoldGlobal">'+moduleFoldSelectOptions(moduleFoldPrefs.global)+'</select></label>'
+    +'<label for="moduleFoldPage">设置页面<select id="moduleFoldPage">'+pages+'</select></label>'
+    +'<div id="moduleFoldRows" role="region" aria-label="模块默认状态"></div><p class="muted module-fold-help" id="moduleFoldStatus" role="status">设置保存在当前浏览器。</p>'
+    +'</div><div class="btns"><button type="button" class="ok" id="moduleFoldDone">完成</button></div>');
+  $('#modalBox').classList.add('wide');
+  const global=$('#moduleFoldGlobal'),page=$('#moduleFoldPage'),rows=$('#moduleFoldRows');
+  page.value=moduleFoldSettingsPage;
+  function renderRows(){
+    rows.innerHTML=[...moduleFoldPanels.values()].filter(panel=>panel.page===page.value).map(panel=>
+      '<label class="module-fold-row"><span>'+esc(panel.name)+'</span><select data-fold-default="'+panel.id+'">'
+      +moduleFoldSelectOptions(moduleFoldPrefs.overrides[panel.id]||'inherit',true)+'</select></label>').join('');
+    rows.scrollTop=0;
+  }
+  function save(){
+    $('#moduleFoldStatus').textContent=saveModuleFoldPrefs()?'已保存到当前浏览器。':'本次已生效，浏览器暂时无法保存设置。';
+  }
+  global.onchange=()=>{
+    moduleFoldPrefs.global=global.value;
+    applyModuleFoldDefaults();
+    save();
+  };
+  page.onchange=()=>{moduleFoldSettingsPage=page.value;renderRows();};
+  rows.onchange=event=>{
+    const control=event.target.closest('[data-fold-default]');
+    if(!control)return;
+    const id=control.dataset.foldDefault;
+    if(control.value==='inherit')delete moduleFoldPrefs.overrides[id];
+    else moduleFoldPrefs.overrides[id]=control.value;
+    setModulePanelOpen(moduleFoldPanels.get(id),foldDefaultOpen(id));
+    save();
+  };
+  $('#moduleFoldDone').onclick=()=>{closeModal();trigger.focus({preventScroll:true});};
+  renderRows();
+  global.focus({preventScroll:true});
+}
+$('#moduleFoldSettingsBtn').onclick=openModuleFoldSettings;
+window.addEventListener('storage',event=>{
+  if(event.key!==_LS_NS+MODULE_FOLD_KEY&&event.key!==null)return;
+  moduleFoldPrefs=readModuleFoldPrefs();
+  applyModuleFoldDefaults();
+  if($('#moduleFoldGlobal'))openModuleFoldSettings();
+});
+
 const _ss=$('#storageSnapshotBtn');if(_ss)_ss.onclick=createLocalSnapshot;
 const _sr=$('#storageRestoreBtn');if(_sr)_sr.onclick=restoreLocalSnapshot;
 function syncStickyOffsets(){const hdr=document.querySelector('header.topbar');if(hdr)document.documentElement.style.setProperty('--topbar-h',Math.ceil(hdr.getBoundingClientRect().height)+'px');const sw=$('#moneyViewSwitch');if(sw&&sw.getBoundingClientRect().height)document.documentElement.style.setProperty('--money-switch-h',Math.ceil(sw.getBoundingClientRect().height)+'px')}
@@ -8277,7 +8421,7 @@ try{setMoneyView(localStorage.getItem(MONEY_VIEW_KEY)||'entry')}catch(e){setMone
 const _todayJump=(id,fn)=>{const el=$(id);if(el)el.onclick=fn};
 function scrollTodayModule(sel){
   const scrollToTarget=(behavior)=>{
-    const t=$(sel);if(!t)return;
+    const t=$(sel);if(!t?.closest('.page.active')||!revealModuleTarget(t)||!t.getClientRects().length)return;
     const hdr=document.querySelector('header.topbar');
     const hdrBottom=hdr?hdr.getBoundingClientRect().bottom:0;
     const rect=t.getBoundingClientRect();
@@ -8291,7 +8435,7 @@ function scrollTodayModule(sel){
 _todayJump('#todayGoTodo',()=>scrollTodayModule('[data-module="todos"]'));
 _todayJump('#todayGoHabit',()=>scrollTodayModule('[data-module="habits"]'));
 _todayJump('#todayGoMoney',()=>{setMoneyView('entry');goTab('money',{scrollTo:'#moneyFormSec'})});
-_todayJump('#todayGoLearning',()=>goTab('learning'));
+_todayJump('#todayGoLearning',()=>goTab('learning',{scrollTo:'[data-module="learning"]'}));
 queueLocalMirror(stateJson());
 
 /* ============ 全局渲染 ============ */
@@ -10022,6 +10166,8 @@ $('#pomoSettingsForm').onsubmit=event=>{
 $('#pomoFocusView').onclick=()=>{
   const entering=!document.body.classList.contains('pomo-focus');if(entering)pomoFocusReturnY=scrollY;
   document.body.classList.toggle('pomo-focus',entering);
+  const fold=moduleFoldPanels.get('pomodoro');
+  if(fold)fold.button.disabled=entering;
   $('#pomoFocusView').textContent=entering?'退出专注模式 ↙':'进入专注模式 ↗';
   $('#pomoFocusView').setAttribute('aria-pressed',String(entering));
   if(entering)$('#pomoSection').scrollTop=0;else window.scrollTo({top:pomoFocusReturnY,behavior:'instant'});
@@ -10036,7 +10182,7 @@ window.addEventListener('storage',event=>{if(event.key===POMO_KEY||event.key===n
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')pomoTick();});
 window.addEventListener('pageshow',pomoTick);
 $('#pomoMiniToggle').onclick=pomoPrimary;
-$('#pomoMiniOpen').onclick=()=>{goTab('today',{scrollTo:'#pomoSection'});$('#pomoSection').scrollIntoView({block:'start',behavior:'smooth'});};
+$('#pomoMiniOpen').onclick=()=>goTab('today',{scrollTo:'#pomoSection'});
 $('#pomoTask').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.isComposing){event.preventDefault();event.target.blur();}});
 let pomoMobileFrame=0;
 function pomoScheduleMobile(){if(!pomoMobileFrame)pomoMobileFrame=requestAnimationFrame(()=>{pomoMobileFrame=0;pomoViewport();});}
@@ -10050,13 +10196,14 @@ pomoViewport();
 setInterval(pomoTick,1000);
 pomoTick();
 
+initModuleFolds();
 initFilters();
 renderAll();
 if(MOCK_SYNC&&location.hash==='#time-quadrants'){
   goTab('notes');setTimeQuadrantView(true);
 }
 if(MOCK_SYNC&&location.hash==='#savings'){
-  goTab('money');setMoneyView('savings');
+  goTab('money');setMoneyView('savings');revealModuleTarget($('#savingsSec'));
 }
 if(MOCK_SYNC&&location.hash==='#expense-analysis'){
   goTab('money');setMoneyView('analysis');scrollTodayModule('#expenseAnalysisSec');
