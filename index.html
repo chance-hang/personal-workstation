@@ -17,7 +17,7 @@
 <link rel="icon" href="./icons/icon.svg?v=20261118-c" type="image/svg+xml" sizes="any">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png?v=20261118-c" sizes="180x180">
 <link rel="manifest" href="./site.webmanifest?v=20261118-c">
-  <link rel="stylesheet" href="styles.css?v=review-budget-guideline-20261119-1">
+  <link rel="stylesheet" href="styles.css?v=review-budget-guideline-20261119-2">
 </head>
 <body>
 <div class="main-area" id="mainArea">
@@ -334,6 +334,7 @@
               <span class="budget-advice-label" id="budgetAdviceLabel" hidden></span>
             </div>
             <div class="muted" id="budgetHint" style="margin-top:2px">点右上「我的」可设置预算</div>
+            <div class="muted" id="budgetWarnTiming" hidden>每日警戒线在该月开始后显示</div>
             <div class="muted" id="budgetExcl" style="margin-top:2px;color:var(--warn)"></div>
             <div class="muted" id="budgetCarry" style="margin-top:2px"></div>
             <div class="muted" id="incomeExcl" style="margin-top:2px;color:var(--income)"></div>
@@ -392,6 +393,7 @@
         </div>
         <div class="card">
           <div class="pie-title-row"><span class="pie-title">总支出构成</span><span class="muted pie-sub">点图例可多选高亮对比</span></div>
+          <div class="muted pie-range" id="flowPieRange"></div>
           <div class="pie-ctl quick-chips" id="pieDimRow">
             <span class="pc-lab">维度</span>
             <button type="button" class="quick-chip on" data-d="cat">按分类</button>
@@ -702,6 +704,6 @@
 <div class="modal-mask" id="modalMask"><div class="modal" id="modalBox"></div></div>
 
 
-  <script src="app.js?v=review-budget-guideline-20261119-1"></script>
+  <script src="app.js?v=review-budget-guideline-20261119-2"></script>
 </body>
 </html>

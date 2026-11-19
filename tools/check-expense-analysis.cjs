@@ -137,6 +137,7 @@ async function amounts(page,index,row){
   assert.deepEqual(await amounts(page,0,'2026年12月预算建议'),['¥266.67','¥48.33','¥315']);
   assert.equal(await page.locator('#budgetTxt').textContent(),'¥0 / ¥4,500');
   assert.equal(await warning.textContent(),'');
+  assert.equal(await page.locator('#budgetWarnTiming').isVisible(),true);
   const position=await mark.evaluate(el=>parseFloat(el.parentElement.parentElement.style.getPropertyValue('--budget-advice-position')));
   assert(Math.abs(position-266.67/4500*100)<0.001);
   await page.locator('#mNext').click();
@@ -148,6 +149,10 @@ async function amounts(page,index,row){
 
   await page.evaluate(()=>{S.budget=500;renderMonthStat()});
   assert.match(await page.locator('#budgetTxt').textContent(),/¥100（已扣上月 ¥400）/);
+  assert.equal(await mark.isVisible(),true);
+  assert.match(await mark.getAttribute('class'),/outside/);
+  assert.match(await advice.textContent(),/高于本月可用预算/);
+  await page.evaluate(()=>{S.budget=400;renderMonthStat()});
   assert.equal(await mark.isVisible(),false);
   assert.match(await advice.textContent(),/高于本月可用预算/);
   await page.evaluate(()=>{S.budget=0;renderMonthStat()});
@@ -163,6 +168,7 @@ async function amounts(page,index,row){
   await page.evaluate(()=>{S.budget=4500;renderMonthStat()});
   assert.equal(await advice.textContent(),'建议预算 ¥266.67');
   assert.match(await warning.textContent(),/^警戒 /);
+  assert.equal(await page.locator('#budgetWarnTiming').isVisible(),false);
   assert.doesNotMatch(await page.locator('#budgetHint').textContent(),/达到建议/);
   await page.evaluate(record=>{S.ledger.push(record);renderMonthStat()},entry('dec-in','2026-12-01',266.67));
   assert.match(await page.locator('#budgetHint').textContent(),/已达到建议预算/);
@@ -178,6 +184,35 @@ async function amounts(page,index,row){
   await page.locator('#mNext').click();
   assert.equal(await page.locator('#mLabel').textContent(),'2027年2月');
   pass('month rollover keeps the threshold, only budgeted spending triggers it, privacy clears it, and month-end navigation works');
+
+  const capture=await pageAt(390);
+  const screenshotRows=[
+    entry('aug','2026-08-01',4708.55),
+    entry('sep','2026-09-01',2293.61),
+    entry('oct','2026-10-01',3920.17),
+    entry('nov','2026-11-01',1695.74),
+    entry('nov-travel','2026-11-01',3879.92,outCat)
+  ];
+  await load(capture,screenshotRows);
+  await capture.evaluate(()=>{S.budget=4500;renderMonthStat()});
+  await capture.locator('#mNext').click();
+  await capture.locator('#moneyViewSwitch [data-v="entry"]').click();
+  assert.equal(await capture.locator('#dateIn').inputValue(),'2026-11-19');
+  await capture.locator('#amtIn').fill('5799');
+  await capture.locator('#amtSave').click();
+  await capture.locator('#moneyViewSwitch [data-v="analysis"]').click();
+  assert.equal(await capture.locator('#mLabel').textContent(),'2026年11月');
+  assert.match(await capture.locator('#flowPieRange').textContent(),/2026-11-01 ~ 2026-11-30/);
+  assert.match(await capture.locator('#flowPie').textContent(),/11,374\.66/);
+  assert.match(await capture.locator('#flowPieBudget').textContent(),/7,494\.74/);
+  assert.deepEqual(await amounts(capture,1,/^11 月/),['¥7,494.74','¥3,879.92','¥11,374.66']);
+  assert.equal(await capture.locator('#budgetWarnLabel').textContent(),'警戒 ¥2,850');
+  await capture.locator('#mNext').click();
+  assert.match(await capture.locator('#budgetTxt').textContent(),/¥1,505.26（已扣上月 ¥2,994.74）/);
+  assert.match(await capture.locator('#budgetAdviceLabel').textContent(),/建议预算 ¥3,640.78（高于本月可用预算）/);
+  assert.equal(await capture.locator('#budgetAdviceMark.outside').isVisible(),true);
+  await capture.context().close();
+  pass('saving from the next-month preview reveals the recorded month in both charts and restores the daily warning');
 
   for(const width of [320,375,414,768]){
     const mobile=await pageAt(width);

@@ -4282,7 +4282,15 @@ $('#dateIn').value=todayStr();
 $('#amtSave').onclick=()=>{
   if(!requireVisibleAmounts('记账'))return;
   const a=parseFloat($('#amtIn').value);if(!a||a<=0){toast('请输入金额');return}
-  S.ledger.push({id:uid(),type:curType,amount:a,category:curCat,note:$('#ledgerNoteIn').value.trim(),date:$('#dateIn').value});
+  const date=$('#dateIn').value;
+  if(!timeValidDay(date)){toast('请选择有效的记账日期');return}
+  S.ledger.push({id:uid(),type:curType,amount:a,category:curCat,note:$('#ledgerNoteIn').value.trim(),date});
+  const from=$('#flowFrom').value,to=$('#flowTo').value;
+  if(date.slice(0,7)!==fmtDate(curMonth).slice(0,7)||(from&&date<from)||(to&&date>to)){
+    const [year,month]=date.split('-').map(Number);
+    curMonth.setFullYear(year,month-1,1);
+    syncFlowToMonth();
+  }
   $('#amtIn').value='';$('#ledgerNoteIn').value='';$('#dateIn').value=todayStr();
   persist();renderMoney();renderHeader();toast('已记一笔');
 };
@@ -4565,6 +4573,7 @@ function renderPieCtl(list){
   });
 }
 function renderPies(list){
+  $('#flowPieRange').textContent='图表范围 '+rangeLabel($('#flowFrom').value,$('#flowTo').value);
   if(amountPrivacy){
     for(const id of ['#flowPie','#flowPieBudget'])$(id).innerHTML='<div class="amount-chart-cover">金额图表已隐藏</div>';
     for(const id of ['#flowPieLegend','#flowPieBudgetLegend','#pieCatChips','#pieFocusName','#pieBudgetFocusName'])$(id).replaceChildren();
@@ -4751,6 +4760,7 @@ function renderBudgetAdvice(month,today,effectiveBudget,budgetExpense){
   wrap.classList.toggle('has-advice',!!suggestion);
   if(!suggestion){
     mark.hidden=true;
+    mark.classList.remove('outside');
     label.textContent='';
     label.classList.remove('outside','reached');
     wrap.style.removeProperty('--budget-advice-position');
@@ -4759,8 +4769,10 @@ function renderBudgetAdvice(month,today,effectiveBudget,budgetExpense){
   const value=suggestion.included/100;
   const budgetCents=Math.round(effectiveBudget*100);
   const inScale=budgetCents>0&&suggestion.included<=budgetCents;
+  const aboveScale=budgetCents>0&&suggestion.included>budgetCents;
   const reached=Math.round(budgetExpense*100)>=suggestion.included&&budgetExpense>0;
-  mark.hidden=!inScale;
+  mark.hidden=!inScale&&!aboveScale;
+  mark.classList.toggle('outside',aboveScale);
   wrap.style.setProperty('--budget-advice-position',inScale?suggestion.included/budgetCents*100+'%':'0%');
   label.classList.toggle('outside',!inScale);
   label.classList.toggle('reached',reached);
@@ -4784,10 +4796,11 @@ function renderMonthStat(){
     <div class="s inc"><div class="n">${money(inc)}</div><div class="l">收入</div></div>
     <div class="s exp"><div class="n">${money(exp)}</div><div class="l">支出</div></div>
     <div class="s"><div class="n" style="color:var(--text)">${money(inc-exp)}</div><div class="l">结余</div></div>`;
-  const warnEl=$('#budgetWarn'),warnLabel=$('#budgetWarnLabel');
+  const warnEl=$('#budgetWarn'),warnLabel=$('#budgetWarnLabel'),warnTiming=$('#budgetWarnTiming');
   warnEl.classList.remove('show');
   warnLabel.classList.remove('show');
   warnLabel.textContent='';
+  warnTiming.hidden=true;
   let effBudget=0;
   if(amountPrivacy){
     $('#budgetTxt').textContent=MONEY_MASK;
@@ -4823,6 +4836,7 @@ function renderMonthStat(){
       warnLabel.style.left=dayPct+'%';
       warnLabel.classList.add('show');
     }
+    warnTiming.hidden=prevMs!==today.slice(0,7);
   }else{
     $('#budgetTxt').textContent='未设置';
     $('#budgetBar').style.width='0';

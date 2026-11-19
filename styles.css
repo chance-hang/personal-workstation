@@ -241,6 +241,7 @@ main{flex:1;padding:16px 16px calc(var(--tab-h) + 24px)}
 .pie-focus .x{cursor:pointer;font-size:16px;color:var(--text-2);padding:0 4px;line-height:1;border-radius:6px;transition:background .15s,color .15s}
 .pie-focus .x:hover{background:var(--line);color:var(--bad)}
 #pieStamp{font-variant-numeric:tabular-nums;color:var(--text-2)}
+.pie-range{margin:4px 0 8px;font-size:var(--ui-font-caption);font-variant-numeric:tabular-nums}
 .field{display:flex;align-items:center;gap:8px;background:var(--card-soft);border:1px solid var(--line);border-radius:var(--r-sm);padding:9px 12px;margin-bottom:10px}
 .field .lab{color:var(--text-3);font-size:12px;flex:none;width:48px}
 .field input,.field select{flex:1;border:none;background:transparent;outline:none;font-size:14px}
@@ -297,6 +298,10 @@ main{flex:1;padding:16px 16px calc(var(--tab-h) + 24px)}
   position:absolute;inset-block:0;left:clamp(1px,var(--budget-advice-position),calc(100% - 1px));
   width:2px;transform:translateX(-50%);background:var(--warn);z-index:3;
 }
+.budget-advice-mark.outside{
+  left:100%;width:7px;transform:translateX(-100%);
+  clip-path:polygon(0 0,50% 0,100% 50%,50% 100%,0 100%,50% 50%);
+}
 .budget-advice-label{
   position:relative;width:min(10rem,100%);margin:6px 0 0;
   margin-left:clamp(0px,calc(var(--budget-advice-position) - 5rem),calc(100% - 10rem));
@@ -307,6 +312,7 @@ main{flex:1;padding:16px 16px calc(var(--tab-h) + 24px)}
 .budget-warn-label.show + .budget-advice-label{margin-top:32px}
 .budget-advice-label.outside{width:auto;margin-left:0;text-align:left}
 .budget-advice-label.reached{color:var(--bad)}
+#budgetWarnTiming{margin-top:2px;font-size:var(--ui-font-caption)}
 .month-pick{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .month-pick button{background:transparent;border:1px solid var(--line);border-radius:var(--r-xs);padding:6px 10px;font-size:13px;transition:all .15s}
 .month-pick button:active{background:var(--card-soft)}
