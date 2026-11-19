@@ -288,8 +288,25 @@ main{flex:1;padding:16px 16px calc(var(--tab-h) + 24px)}
 .budget-bar i{display:block;height:100%;border-radius:99px;transition:width .35s ease}
 .budget-warn{position:absolute;top:-3px;bottom:-3px;left:0;width:3px;background:#ff4d4f;box-shadow:0 0 5px rgba(255,77,79,.65);z-index:2;opacity:0;transition:left .35s ease,opacity .2s ease;pointer-events:none}
 .budget-warn.show{opacity:1}
-.budget-warn-label{position:absolute;top:100%;left:0;transform:translateX(-50%);font-size:10px;font-weight:700;color:#ff4d4f;white-space:nowrap;font-variant-numeric:tabular-nums;opacity:0;transition:left .35s ease,opacity .2s ease;pointer-events:none}
+.budget-warn-label{position:absolute;top:19px;left:0;transform:translateX(-50%);font-size:10px;line-height:1.4;font-weight:700;color:#ff4d4f;white-space:nowrap;font-variant-numeric:tabular-nums;opacity:0;transition:left .35s ease,opacity .2s ease;pointer-events:none}
 .budget-warn-label.show{opacity:1}
+/* finesse · component: budget guideline · register=product
+ * states: hidden · within scale · above scale · reached · amount privacy · tokens: inherited */
+.budget-bar-wrap.has-advice{padding-bottom:0}
+.budget-advice-mark{
+  position:absolute;inset-block:0;left:clamp(1px,var(--budget-advice-position),calc(100% - 1px));
+  width:2px;transform:translateX(-50%);background:var(--warn);z-index:3;
+}
+.budget-advice-label{
+  position:relative;width:min(10rem,100%);margin:6px 0 0;
+  margin-left:clamp(0px,calc(var(--budget-advice-position) - 5rem),calc(100% - 10rem));
+  text-align:center;font-size:var(--ui-font-micro);line-height:1.4;font-weight:700;color:var(--text);
+  font-variant-numeric:tabular-nums;overflow-wrap:anywhere;
+}
+.budget-advice-label:not([hidden]){display:block}
+.budget-warn-label.show + .budget-advice-label{margin-top:32px}
+.budget-advice-label.outside{width:auto;margin-left:0;text-align:left}
+.budget-advice-label.reached{color:var(--bad)}
 .month-pick{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .month-pick button{background:transparent;border:1px solid var(--line);border-radius:var(--r-xs);padding:6px 10px;font-size:13px;transition:all .15s}
 .month-pick button:active{background:var(--card-soft)}

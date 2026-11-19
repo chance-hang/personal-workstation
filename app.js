@@ -3600,6 +3600,7 @@ $('#focusBudgetToggle').onclick=()=>{
 
 /* ============ 账本 ============ */
 let curType='expense',curCat=null,curMonth=new Date();
+let moneyOverviewRenderedDay='';
 function renderMoney(){
   renderCats();renderFlow();renderMonthStat();renderCatChart();renderTodayStat();renderNoteQuickRow();renderFundManager();renderFocusCard();renderSavings();renderExpenseAnalysis();
 }
@@ -4734,8 +4735,44 @@ function prevMonthMs(ms){
 function budgetExpOf(ms){
   return S.ledger.filter(x=>x.date.startsWith(ms)&&x.type==='expense'&&catInBudget('expense',x.category)).reduce((s,x)=>s+x.amount,0);
 }
+function renderBudgetAdvice(month,today,effectiveBudget,budgetExpense){
+  const mark=$('#budgetAdviceMark');
+  const label=$('#budgetAdviceLabel');
+  const wrap=label.parentElement;
+  const thisMonth=today.slice(0,7);
+  const previousMonth=prevMonthMs(month);
+  let suggestion=null;
+  if(!amountPrivacy&&S.budget>0&&(month===thisMonth||previousMonth===thisMonth)){
+    // Keep using the recommendation issued for this month after it begins.
+    const forecastDay=month===thisMonth?previousMonth+'-01':today;
+    suggestion=expenseAnalysisModel(forecastDay).month.suggestion;
+  }
+  label.hidden=!suggestion;
+  wrap.classList.toggle('has-advice',!!suggestion);
+  if(!suggestion){
+    mark.hidden=true;
+    label.textContent='';
+    label.classList.remove('outside','reached');
+    wrap.style.removeProperty('--budget-advice-position');
+    return;
+  }
+  const value=suggestion.included/100;
+  const budgetCents=Math.round(effectiveBudget*100);
+  const inScale=budgetCents>0&&suggestion.included<=budgetCents;
+  const reached=Math.round(budgetExpense*100)>=suggestion.included&&budgetExpense>0;
+  mark.hidden=!inScale;
+  wrap.style.setProperty('--budget-advice-position',inScale?suggestion.included/budgetCents*100+'%':'0%');
+  label.classList.toggle('outside',!inScale);
+  label.classList.toggle('reached',reached);
+  const detail=suggestion.included>budgetCents?'（高于本月可用预算）':!inScale?'（本月无可用预算）':'';
+  label.textContent='建议预算 '+money(value)+detail;
+  if(reached)$('#budgetHint').textContent+=' · 已达到建议预算';
+}
 function renderMonthStat(){
   const ms=fmtDate(curMonth).slice(0,7);
+  const now=new Date();
+  const today=fmtDate(now);
+  moneyOverviewRenderedDay=today;
   const m0=monthSum(ms);
   const inc=S.ledger.filter(x=>x.date.startsWith(ms)&&x.type==='income'&&catCountInIncome(x.category)).reduce((s,x)=>s+x.amount,0);
   const excludedInc=m0.inc-inc;
@@ -4747,21 +4784,26 @@ function renderMonthStat(){
     <div class="s inc"><div class="n">${money(inc)}</div><div class="l">收入</div></div>
     <div class="s exp"><div class="n">${money(exp)}</div><div class="l">支出</div></div>
     <div class="s"><div class="n" style="color:var(--text)">${money(inc-exp)}</div><div class="l">结余</div></div>`;
+  const warnEl=$('#budgetWarn'),warnLabel=$('#budgetWarnLabel');
+  warnEl.classList.remove('show');
+  warnLabel.classList.remove('show');
+  warnLabel.textContent='';
+  let effBudget=0;
   if(amountPrivacy){
     $('#budgetTxt').textContent=MONEY_MASK;
     $('#budgetBar').style.width='0';
     $('#budgetHint').textContent='预算金额和进度已隐藏';
     $('#budgetCarry').textContent='';
-    $('#budgetWarnLabel').textContent='';
     $('#budgetExcl').textContent='';
     $('#incomeExcl').textContent='';
+    renderBudgetAdvice(ms,today,0,0);
     return;
   }
   if(S.budget>0){
     const prevMs=prevMonthMs(ms);
     const prevExp=budgetExpOf(prevMs);
     const carry=Math.max(0,prevExp-S.budget);
-    const effBudget=Math.max(0,S.budget-carry);
+    effBudget=Math.max(0,S.budget-carry);
     const denom=effBudget>0?effBudget:1;
     const pct=Math.min(budgetExp/denom*100,100);
     const over=budgetExp>effBudget;
@@ -4771,20 +4813,23 @@ function renderMonthStat(){
     $('#budgetHint').textContent=over?`预算内已超支 ${money(budgetExp-effBudget)}`:`预算内剩余 ${money(effBudget-budgetExp)}`;
     const carryEl=$('#budgetCarry'); if(carryEl)carryEl.textContent=carry>0?`其中 ${money(carry)} 为上月超支结转（已从本月扣除）`:'';
     // 日警戒线：仅当前月显示，位置 = 今日 / 当月总天数
-    const now=new Date();
-    const isCur=curMonth.getFullYear()===now.getFullYear()&&curMonth.getMonth()===now.getMonth();
+    const isCur=ms===today.slice(0,7);
     const dayTotal=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
     const dayPct=isCur?Math.min(now.getDate()/dayTotal*100,100):0;
-    const warnEl=$('#budgetWarn');
-    const warnLabel=$('#budgetWarnLabel');
-    if(warnEl){warnEl.style.left=dayPct+'%';warnEl.classList.toggle('show',isCur);}
-    if(warnLabel){warnLabel.textContent='警戒 '+money(effBudget*dayPct/100);warnLabel.style.left=dayPct+'%';warnLabel.classList.toggle('show',isCur);}
+    warnEl.style.left=dayPct+'%';
+    warnEl.classList.toggle('show',isCur);
+    if(isCur){
+      warnLabel.textContent='警戒 '+money(effBudget*dayPct/100);
+      warnLabel.style.left=dayPct+'%';
+      warnLabel.classList.add('show');
+    }
   }else{
     $('#budgetTxt').textContent='未设置';
     $('#budgetBar').style.width='0';
     $('#budgetHint').textContent='点「我的」可设置月预算';
     const carryEl=$('#budgetCarry'); if(carryEl)carryEl.textContent='';
   }
+  renderBudgetAdvice(ms,today,effBudget,budgetExp);
   $('#budgetExcl').textContent=excludedExp>0?`其中 ${money(excludedExp)} 不计入预算、不计入支出`:'';
   const incExclEl=$('#incomeExcl'); if(incExclEl)incExclEl.textContent=excludedInc>0?`其中 ${money(excludedInc)} 不计入收入`:'';
 }
@@ -4815,8 +4860,12 @@ function syncFlowToMonth(){
   const isLast=fmtDate(curMonth).slice(0,7)===fmtDate(new Date(now.getFullYear(),now.getMonth()-1,1)).slice(0,7);
   if(isThis)setFlowRange(f,t,'thisMonth');else if(isLast)setFlowRange(f,t,'lastMonth');
 }
-$('#mPrev').onclick=()=>{curMonth.setMonth(curMonth.getMonth()-1);syncFlowToMonth();renderMonthStat();renderFlow();renderCatChart()};
-$('#mNext').onclick=()=>{curMonth.setMonth(curMonth.getMonth()+1);syncFlowToMonth();renderMonthStat();renderFlow();renderCatChart()};
+function changeLedgerMonth(offset){
+  curMonth.setMonth(curMonth.getMonth()+offset,1);
+  syncFlowToMonth();renderMonthStat();renderFlow();renderCatChart();
+}
+$('#mPrev').onclick=()=>changeLedgerMonth(-1);
+$('#mNext').onclick=()=>changeLedgerMonth(1);
 
 /* ============ 热力图 / 心情 / 倒计日 ============ */
 function renderHeat(){renderMood();renderHeatmap();renderCountdown();renderCheckins()}
@@ -5931,6 +5980,9 @@ $('#todoDueDate').value=todayStr();$('#todoNoDue').onclick=()=>{$('#todoStartDat
 setInterval(()=>{
   if(document.visibilityState!=='visible'||$('#modalMask').classList.contains('show'))return;
   renderHeader();renderFocusCard();renderTodos();
+  if($('#page-money').classList.contains('active')&&moneyOverviewRenderedDay!==todayStr()){
+    renderMonthStat();renderExpenseAnalysis();
+  }
   if($('#page-notes').classList.contains('active')){
     renderNotes();
     if(timeBoardRenderedToday!==todayStr())renderTimeQuadrants();
