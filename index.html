@@ -17,7 +17,7 @@
 <link rel="icon" href="./icons/icon.svg?v=20261118-c" type="image/svg+xml" sizes="any">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png?v=20261118-c" sizes="180x180">
 <link rel="manifest" href="./site.webmanifest?v=20261118-c">
-  <link rel="stylesheet" href="styles.css?v=prod-logo-c-20261118-1">
+  <link rel="stylesheet" href="styles.css?v=review-finance-audit-20261119-1">
 </head>
 <body>
 <div class="main-area" id="mainArea">
@@ -209,6 +209,53 @@
         <button class="on" data-v="entry">记账</button>
         <button data-v="analysis">分析</button>
         <button data-v="plan">资金规划</button>
+        <button data-v="savings">存款</button>
+      </div>
+      <div class="sec" id="savingsSec" data-module="savings">
+        <div class="page-title">存款记录</div>
+        <div class="card sv-shell">
+          <div class="sv-heading"><h3>账户余额</h3><button type="button" class="sv-button" id="svAddAccount">＋ 账户</button></div>
+          <div class="sv-total"><span>当前总存款</span><strong id="svTotal">¥0</strong><small id="svAsOf"></small></div>
+          <div id="svIntegrity" class="sv-error" role="status" hidden></div>
+          <div id="svAccounts"></div>
+          <p class="sv-hint">只记录现金、银行卡、微信、支付宝等余额。与日常收支独立，账户互转不算新增存款。</p>
+        </div>
+        <div class="card sv-shell">
+          <h3>记一笔</h3>
+          <p id="svEntryHint" class="sv-hint"></p>
+          <form id="svEntryForm" class="sv-form">
+            <label>类型<select id="svKind"><option value="deposit">存入</option><option value="withdraw">取出</option><option value="transfer">账户互转</option></select></label>
+            <label>账户<select id="svAccount" required></select></label>
+            <label id="svToField" hidden>转入账户<select id="svToAccount"></select></label>
+            <label>金额（元）<input id="svAmount" inputmode="decimal" autocomplete="off" maxlength="18" placeholder="0.00" required></label>
+            <label>日期<input id="svDate" type="date" min="1900-01-01" required></label>
+            <label class="sv-full">备注<input id="svNote" maxlength="120" placeholder="选填，例如本月结余"></label>
+            <p class="sv-error sv-full" id="svEntryError" role="alert"></p>
+            <button class="sv-button sv-primary sv-full" type="submit" id="svSave">保存流水</button>
+          </form>
+        </div>
+        <div class="card sv-shell">
+          <h3>月度与年度统计</h3>
+          <div class="sv-query">
+            <label>统计方式<select id="svMode"><option value="month">按月</option><option value="year">按年</option></select></label>
+            <label>查询期间<input id="svPeriod" type="month" required></label>
+            <label class="sv-full">查询账户<select id="svFilterAccount"><option value="">全部账户</option></select></label>
+          </div>
+          <p id="svPeriodHint" class="sv-hint" role="status"></p>
+          <div id="svStats" class="sv-stats"></div>
+          <div id="svMonths"></div>
+          <details class="sv-rules"><summary>统计口径</summary><p>期末余额＝期初余额＋期间新增起始余额＋存入－取出＋互转净额。净存入＝存入－取出。起始余额单列，全部账户的互转相抵。余额按截至日期的已录流水计算，并非银行实时余额。</p><p>补录、修改或删除历史流水，会重新计算相关月份。尚未建立账户的期间显示“未记录”，未来月份不预估余额。</p></details>
+        </div>
+        <div class="card sv-shell">
+          <div class="sv-heading"><h3>流水查询</h3><span class="sv-hint" id="svFlowCount"></span></div>
+          <div class="sv-query">
+            <label>类型<select id="svFlowKind"><option value="">全部类型</option><option value="deposit">存入</option><option value="withdraw">取出</option><option value="transfer">账户互转</option></select></label>
+            <label>搜索备注<input id="svSearch" type="search" maxlength="120" placeholder="输入关键词"></label>
+          </div>
+          <p class="sv-hint">流水跟随上方期间和账户；类型、关键词仅筛选下方明细。</p>
+          <div id="svFlows"></div>
+          <div id="svPagination" class="sv-pagination"></div>
+        </div>
       </div>
       <div class="sec" id="moneyFormSec" data-module="moneyForm">
         <div class="page-title">记一笔</div>
@@ -245,6 +292,17 @@
             <div class="muted" id="budgetCarry" style="margin-top:2px"></div>
             <div class="muted" id="incomeExcl" style="margin-top:2px;color:var(--income)"></div>
           </div>
+        </div>
+      </div>
+
+      <div class="sec" data-module="expenseAnalysis" id="expenseAnalysisSec">
+        <div class="page-title">年／月支出分析</div>
+        <div class="card ea-card">
+          <div class="ea-filters" id="eaFilters">
+            <label>统计周期<select id="eaMode"><option value="month">按月</option><option value="year">按年</option></select></label>
+            <label id="eaYearField">查看年份<select id="eaYear"></select></label>
+          </div>
+          <div id="eaResults" aria-live="polite"></div>
         </div>
       </div>
 
@@ -653,6 +711,6 @@
 <div class="modal-mask" id="modalMask"><div class="modal" id="modalBox"></div></div>
 
 
-  <script src="app.js?v=prod-logo-c-20261118-1"></script>
+  <script src="app.js?v=review-finance-audit-20261119-1"></script>
 </body>
 </html>

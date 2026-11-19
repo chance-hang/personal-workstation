@@ -2419,7 +2419,7 @@ function setAmountPrivacy(enabled){
   if($('#histPreviewBack'))closeModal();
   if(enabled){
     ledgerAmountDraft=$('#amtIn').value;
-    if($('#modalBox :is(#bIn,#elAmt,#qnText,#ipText,#mpText,#expDl,#reportText,#hisExpText,#lnExpText)'))closeModal();
+    if($('#modalBox :is(#bIn,#elAmt,#qnText,#ipText,#mpText,#expDl,#reportText,#hisExpText,#lnExpText,#svAccountForm,#svEditForm,#svDeleteConfirm)'))closeModal();
   }
   amountPrivacy=enabled;
   applyAmountControls();
@@ -2455,6 +2455,15 @@ const dateAdd=(ds,n)=>{const d=new Date(ds+'T00:00:00');d.setDate(d.getDate()+n)
 
 /* ============ 升级功能清单 ============ */
 const CHANGELOG=[
+  {version:'v3.34.0',date:'2026-11-19',modules:['账本'],status:'待验收',items:[
+    '分析页新增按月和按年查询支出，分列计入预算、不计入预算和总支出',
+    '根据已结束期间的账单动态计算历史平均及下月、下年预算建议'
+  ]},
+  {version:'v3.33.0',date:'2026-11-18',modules:['账本'],status:'待验收',items:[
+    '新增独立存款页：自定义账户与起始余额，记录存入、取出和账户互转，不自动生成日常收支',
+    '支持按月、按年和按账户查询净存入与期末余额；补录、修改及删除历史流水后重新计算余额',
+    '存款记录接入现有保存、备份、模拟同步验收及金额隐私保护'
+  ]},
   {version:'v3.32.0',date:'2026-11-18',modules:['界面'],status:'已上线',items:[
     '启用「稳步推进」图标，适配浏览器标签页、收藏与手机桌面'
   ]},
@@ -2810,6 +2819,7 @@ const KEY='lifeworkbench_v1';
 const DEFAULT={
   version:3,
   todos:[], habits:[], ledger:[], budget:0,
+  savingsAccounts:[], savingsEntries:[],
   moods:{}, notes:[], countdowns:[], worklog:[],
   timeEntries:[], dailyTimeReviews:[],
   customCats:{expense:[],income:[]},
@@ -3084,11 +3094,72 @@ function catInBudget(type,name){
   if(S.budgetCats&&typeof S.budgetCats[name]==='boolean')return S.budgetCats[name];
   return true;
 }
+/* Budget/category edits carry independent clocks; ordinary ledger edits never reset them. */
+function ledgerSettingTouch(key){
+  S.ledgerSettingsUpdatedAt=S.ledgerSettingsUpdatedAt||{};
+  const previous=noteUpdatedAt(S.ledgerSettingsUpdatedAt[key])||0;
+  S.ledgerSettingsUpdatedAt[key]=Math.max(Date.now(),previous+1);
+}
+
+function mergeLedgerSettings(remote){
+  const before=JSON.stringify([S.budget,S.budgetCats,S.customCats,S.ledgerSettingsUpdatedAt]);
+  const localTimes=S.ledgerSettingsUpdatedAt||{},remoteTimes=remote.ledgerSettingsUpdatedAt||{};
+  const chooseRemote=(key,localValue,remoteValue)=>{
+    const lt=noteUpdatedAt(localTimes[key])||0,rt=noteUpdatedAt(remoteTimes[key])||0;
+    if(lt||rt){
+      if(rt===lt&&(remoteValue===undefined||localValue===undefined))return remoteValue===undefined;
+      return rt>lt||(rt===lt&&stableNote(remoteValue)>stableNote(localValue));
+    }
+    return localValue===undefined;
+  };
+  const takeClock=key=>{
+    if(noteUpdatedAt(remoteTimes[key])===null)return;
+    S.ledgerSettingsUpdatedAt=S.ledgerSettingsUpdatedAt||{};
+    S.ledgerSettingsUpdatedAt[key]=remoteTimes[key];
+  };
+  if(Number.isFinite(remote.budget)&&remote.budget>=0){
+    const localValue=S.budget>0||localTimes.budget?S.budget:undefined;
+    if(chooseRemote('budget',localValue,remote.budget)){S.budget=remote.budget;takeClock('budget');}
+  }
+  S.budgetCats=S.budgetCats||{};
+  const names=new Set([...Object.keys(remote.budgetCats||{}),...Object.keys(remoteTimes).filter(key=>key.startsWith('budget:')).map(key=>key.slice(7))]);
+  for(const name of names){
+    const value=remote.budgetCats?.[name];
+    if(typeof value!=='boolean')continue;
+    const key='budget:'+name;
+    if(chooseRemote(key,S.budgetCats[name],value)){S.budgetCats[name]=value;takeClock(key);}
+  }
+  S.customCats=S.customCats||{expense:[],income:[]};
+  for(const type of ['expense','income']){
+    const remoteCats=Array.isArray(remote.customCats?.[type])?remote.customCats[type]:[];
+    const localCats=Array.isArray(S.customCats[type])?S.customCats[type]:[];
+    const remoteMap=new Map(remoteCats.filter(cat=>cat&&typeof cat.name==='string').map(cat=>[cat.name,cat]));
+    const map=new Map(localCats.map(cat=>[cat.name,cat]));
+    const prefix='custom:'+type+':';
+    const allNames=new Set([...remoteMap.keys(),...Object.keys(remoteTimes).filter(key=>key.startsWith(prefix)).map(key=>key.slice(prefix.length))]);
+    for(const name of allNames){
+      const key=prefix+name,local=map.get(name),incoming=remoteMap.get(name);
+      // A missing record with a clock is an explicit deletion, so stale copies cannot revive it.
+      if(!incoming&&!remoteTimes[key])continue;
+      if(local&&incoming&&!localTimes[key]&&!remoteTimes[key]&&typeof local.inBudget!=='boolean'&&typeof incoming.inBudget==='boolean'){
+        map.set(name,{...local,inBudget:incoming.inBudget});
+        continue;
+      }
+      if(chooseRemote(key,local,incoming)){
+        if(incoming)map.set(name,structuredClone(incoming));else map.delete(name);
+        takeClock(key);
+      }
+    }
+    S.customCats[type]=[...map.values()];
+  }
+  return before!==JSON.stringify([S.budget,S.budgetCats,S.customCats,S.ledgerSettingsUpdatedAt]);
+}
+
 function setCatBudget(type,name,on){
   if(type!=='expense')return;
   const c=(customCats('expense')||[]).find(x=>x.name===name);
-  if(c){c.inBudget=!!on}
-  else{S.budgetCats[name]=!!on}
+  if(c){c.inBudget=!!on;ledgerSettingTouch('custom:expense:'+name);}
+  else{S.budgetCats[name]=!!on;ledgerSettingTouch('budget:'+name);}
   persist();
 }
 /* 收入类型是否计入收入总额：报销等类型不计入收入统计 */
@@ -3113,10 +3184,12 @@ const SUBMODULES={
   money:[
     {id:'moneyForm',secId:'moneyFormSec',label:'记一笔',ic:'M12 5v14M5 12h14'},
     {id:'monthOverview',label:'本月概览',ic:'M3 3v18h18M7 14l4-4 3 3 5-5'},
+    {id:'expenseAnalysis',label:'年／月支出分析',ic:'M3 3v18h18M7 17v-5M12 17V8M17 17V5'},
     {id:'catExpense',label:'分类支出',ic:'M21 21H4.6c-.56 0-.84 0-1.05-.11a1 1 0 0 1-.44-.44C3 20.24 3 19.96 3 19.4V3'},
     {id:'flowList',label:'账单明细',ic:'M9 5h11M9 12h11M9 19h11M5 5h.01M5 12h.01M5 19h.01'},
     {id:'fundManager',label:'资金管理',ic:'M3 3h18v18H3zM3 9h18M9 3v18'},
-    {id:'assets',label:'总资产',ic:'M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z'}
+    {id:'assets',label:'总资产',ic:'M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z'},
+    {id:'savings',label:'存款记录',ic:'M3 7h18v14H3zM7 7V3h10v4M3 12h18M9 16h6'}
   ],
   heat:[
     {id:'mood',label:'今日心情',ic:'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01'},
@@ -3161,6 +3234,10 @@ function renderSidebar(tabKey){
   $$('.side-item',list).forEach(it=>{
     it.addEventListener('click',()=>{
       const id=it.dataset.mod,secId=it.dataset.secid;
+      if(tabKey==='money'){
+        if(id==='expenseAnalysis')setMoneyView('analysis');
+        else if(id==='savings'||$('#page-money').dataset.moneyView==='savings')setMoneyView(id==='savings'?'savings':['fundManager','assets'].includes(id)?'plan':['catExpense','flowList'].includes(id)?'analysis':'entry');
+      }
       const sel=secId?'#'+secId:'.sec[data-module="'+id+'"]';
       const t=$(sel);if(!t)return;
       $$('.side-item',list).forEach(x=>x.classList.remove('on'));
@@ -3521,8 +3598,282 @@ $('#focusBudgetToggle').onclick=()=>{
 /* ============ 账本 ============ */
 let curType='expense',curCat=null,curMonth=new Date();
 function renderMoney(){
-  renderCats();renderFlow();renderMonthStat();renderCatChart();renderTodayStat();renderNoteQuickRow();renderFundManager();renderAssets();renderFocusCard();
+  renderCats();renderFlow();renderMonthStat();renderCatChart();renderTodayStat();renderNoteQuickRow();renderFundManager();renderAssets();renderFocusCard();renderSavings();renderExpenseAnalysis();
 }
+/* ============ 存款：独立账户与流水，金额以整数分保存 ============ */
+const SV_LIMIT=1000000000000,SV_PAGE_SIZE=20;
+let svPage=0;
+function svRecords(field,state=S){return timeRecords(state[field]);}
+function svMergeRecords(current,incoming){
+  const map=new Map();
+  for(const record of [...timeRecords(current),...timeRecords(incoming)]){
+    const previous=map.get(record.id);
+    const tied=previous&&noteUpdatedAt(previous.updatedAt)===noteUpdatedAt(record.updatedAt);
+    map.set(record.id,tied&&!!previous.deletedAt!==!!record.deletedAt?(previous.deletedAt?previous:record):timeNewest(previous,record));
+  }
+  return [...map.values()].sort((a,b)=>a.id.localeCompare(b.id));
+}
+function svAccounts(state=S){return svRecords('savingsAccounts',state).filter(x=>!x.deletedAt);}
+function svEntries(state=S){return svRecords('savingsEntries',state).filter(x=>!x.deletedAt);}
+function svDay(value){return typeof value==='string'&&value>='1900-01-01'&&timeValidDay(value);}
+function svCents(value,zero=false){
+  const text=String(value).trim();
+  if(!/^\d+(?:\.\d{1,2})?$/.test(text))return null;
+  const [whole,fraction='']=text.split('.'),cents=Number(whole)*100+Number(fraction.padEnd(2,'0'));
+  return Number.isSafeInteger(cents)&&cents<=SV_LIMIT&&(zero?cents>=0:cents>0)?cents:null;
+}
+function svMoney(cents){return money(cents/100);}
+function svDelta(entry,id){
+  if(entry.kind==='transfer')return (entry.toAccountId===id?entry.amountCents:0)-(entry.accountId===id?entry.amountCents:0);
+  return entry.accountId===id?(entry.kind==='deposit'?entry.amountCents:-entry.amountCents):0;
+}
+function svBalance(account,day=todayStr(),state=S){
+  if(account.openingDate>day)return null;
+  return account.openingCents+svEntries(state).filter(x=>x.date<=day).reduce((n,x)=>n+svDelta(x,account.id),0);
+}
+function svValidate(state){
+  const accounts=svAccounts(state),entries=svEntries(state),map=new Map(accounts.map(a=>[a.id,a]));
+  for(const a of accounts){
+    if(typeof a.name!=='string'||!a.name.trim()||!svDay(a.openingDate)||a.openingDate>todayStr()||!Number.isSafeInteger(a.openingCents)||a.openingCents<0||a.openingCents>SV_LIMIT)return '账户资料不完整，请检查名称、起始日期和起始余额。';
+  }
+  for(const e of entries){
+    const a=map.get(e.accountId),to=map.get(e.toAccountId);
+    if(!['deposit','withdraw','transfer'].includes(e.kind)||!svDay(e.date)||e.date>todayStr()||!Number.isSafeInteger(e.amountCents)||e.amountCents<=0||e.amountCents>SV_LIMIT)return '流水的类型、日期或金额无效，请核对记录。';
+    if(!a||e.date<a.openingDate)return '流水日期不能早于账户起始日期，且账户必须存在。';
+    if(e.kind==='transfer'&&(!to||a.id===to.id||e.date<to.openingDate))return '互转需要两个不同账户，日期不能早于任一账户起始日期。';
+  }
+  for(const a of accounts){
+    const days=new Map();
+    for(const e of entries)days.set(e.date,(days.get(e.date)||0)+svDelta(e,a.id));
+    let balance=a.openingCents;
+    for(const [date,delta] of [...days].sort(([a],[b])=>a.localeCompare(b))){
+      balance+=delta;
+      if(!Number.isSafeInteger(balance))return '余额超出可计算范围，请核对记录。';
+      if(balance<0)return `“${a.name}”在 ${date} 的余额不足。请先补齐起始余额或此前存入。`;
+    }
+  }
+  return '';
+}
+function svPeriodRange(){
+  const mode=$('#svMode').value,value=$('#svPeriod').value;
+  if(mode==='year'){
+    if(!/^\d{4}$/.test(value)||+value<1900||+value>9999)return null;
+    return {from:value+'-01-01',to:value+'-12-31',year:value};
+  }
+  if(!/^\d{4}-\d{2}$/.test(value)||!svDay(value+'-01'))return null;
+  const [year,month]=value.split('-').map(Number),end=fmtDate(new Date(year,month,0));
+  return {from:value+'-01',to:end,year:String(year)};
+}
+function svSummary(from,to,id='',state=S){
+  const cutoff=to<todayStr()?to:todayStr();
+  const accounts=svAccounts(state).filter(a=>(!id||a.id===id)&&a.openingDate<=cutoff);
+  const result={recorded:from<=cutoff&&accounts.length>0,opening:0,added:0,deposit:0,withdraw:0,transfer:0,closing:0,net:0};
+  if(!result.recorded)return result;
+  for(const a of accounts){
+    if(a.openingDate<from)result.opening+=a.openingCents;
+    else result.added+=a.openingCents;
+    for(const e of svEntries(state)){
+      if(e.date>cutoff)continue;
+      const delta=svDelta(e,a.id);
+      if(e.date<from)result.opening+=delta;
+      else if(e.kind==='transfer')result.transfer+=delta;
+      else if(e.accountId===a.id)result[e.kind]+=e.amountCents;
+    }
+  }
+  result.net=result.deposit-result.withdraw;
+  result.closing=result.opening+result.added+result.net+result.transfer;
+  return result;
+}
+function svPut(field,record){
+  const records=svRecords(field),index=records.findIndex(x=>x.id===record.id);
+  if(index<0)records.push(record);else records[index]=record;
+  const candidate={...S,[field]:records},error=svValidate(candidate);
+  if(error)return error;
+  S[field]=records;persist();renderSavings();return '';
+}
+function svOptions(accounts,selected='',all=false){
+  return (all?'<option value="">全部账户</option>':'')+accounts.map(a=>`<option value="${esc(a.id)}"${a.id===selected?' selected':''}>${esc(a.name)}${a.archived?'（已停用）':''}</option>`).join('');
+}
+function svRefreshSelect(selector,accounts,all=false){
+  const el=$(selector),selected=el.value;
+  el.innerHTML=svOptions(accounts,selected,all);
+  if(all)el.value=accounts.some(a=>a.id===selected)?selected:'';
+}
+function svEntryFields(entry={}){
+  const accounts=svAccounts().filter(a=>!a.archived||[entry.accountId,entry.toAccountId].includes(a.id));
+  return `<label>类型<select id="svEditKind">${[['deposit','存入'],['withdraw','取出'],['transfer','账户互转']].map(([v,t])=>`<option value="${v}"${entry.kind===v?' selected':''}>${t}</option>`).join('')}</select></label>
+    <label>账户<select id="svEditAccount" required>${svOptions(accounts,entry.accountId)}</select></label>
+    <label id="svEditToField"${entry.kind==='transfer'?'':' hidden'}>转入账户<select id="svEditTo">${svOptions(accounts,entry.toAccountId)}</select></label>
+    <label>金额（元）<input id="svEditAmount" inputmode="decimal" maxlength="18" required value="${entry.amountCents/100}"></label>
+    <label>日期<input id="svEditDate" type="date" min="1900-01-01" max="${todayStr()}" required value="${esc(entry.date)}"></label>
+    <label class="sv-full">备注<input id="svEditNote" maxlength="120" value="${esc(entry.note||'')}"></label>`;
+}
+function svReadEntry(prefix,current){
+  const edit=prefix==='svEdit',kind=$(edit?'#svEditKind':'#svKind').value;
+  const accountId=$(edit?'#svEditAccount':'#svAccount').value;
+  const toAccountId=kind==='transfer'?$(edit?'#svEditTo':'#svToAccount').value:'';
+  const amountCents=svCents($(edit?'#svEditAmount':'#svAmount').value);
+  if(amountCents===null)return {error:'请输入大于 0、最多两位小数的金额（最高 100 亿元）。'};
+  const accounts=svAccounts();
+  if([accountId,toAccountId].filter(Boolean).some(id=>accounts.find(a=>a.id===id)?.archived&&![current?.accountId,current?.toAccountId].includes(id)))return {error:'该账户已停用，请选择其他账户。'};
+  return {record:{...current,id:current?.id||uid(),kind,accountId,toAccountId,amountCents,
+    date:$(edit?'#svEditDate':'#svDate').value,note:$(edit?'#svEditNote':'#svNote').value.trim(),updatedAt:timeEditTimestamp(current)}};
+}
+function svDialog(title,body,formId){
+  const before=document.activeElement;
+  modal(`<div id="svDialogPanel" role="dialog" aria-modal="true" aria-labelledby="svDialogTitle"><h4 id="svDialogTitle" tabindex="-1">${title}</h4><form id="${formId}" class="sv-form">${body}<p id="svDialogError" class="sv-error sv-full" role="alert"></p><div class="sv-actions sv-full"><button type="button" class="sv-button" id="svDialogCancel">取消</button><button class="sv-button sv-primary" type="submit">保存</button></div></form></div>`,{noMaskClose:true});
+  const finish=()=>{closeModal();(before?.isConnected?before:$('#svAddAccount'))?.focus({preventScroll:true});};
+  $('#svDialogCancel').onclick=finish;
+  $('#svDialogPanel').onkeydown=event=>{
+    if(event.key==='Escape'){event.preventDefault();finish();return;}
+    if(event.key!=='Tab')return;
+    const elements=[...event.currentTarget.querySelectorAll('button,input,select')].filter(el=>!el.disabled&&!el.closest('[hidden]'));
+    if(!elements.length)return;
+    const first=elements[0],last=elements[elements.length-1];
+    if(event.shiftKey&&(document.activeElement===first||document.activeElement.id==='svDialogTitle')){event.preventDefault();last.focus();}
+    else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+  };
+  $('#svDialogTitle').focus({preventScroll:true});
+  return finish;
+}
+function svOpenAccount(id){
+  if(!requireVisibleAmounts('管理存款账户'))return;
+  const original=svAccounts().find(a=>a.id===id),snapshot=stableNote(original);
+  const finish=svDialog(original?'编辑存款账户':'添加存款账户',`
+    <label class="sv-full">账户名称<input id="svAccountName" maxlength="24" placeholder="例如工资卡" value="${esc(original?.name||'')}" required></label>
+    <label>起始日期<input id="svOpeningDate" type="date" min="1900-01-01" max="${todayStr()}" value="${original?.openingDate||todayStr()}" required></label>
+    <label>起始余额（元）<input id="svOpeningAmount" inputmode="decimal" maxlength="18" value="${original?original.openingCents/100:'0'}" required></label>
+    <p class="sv-hint sv-full">起始余额是这一天开始记录前已有的钱，单独列示，不计入本月或本年新增存款。后续请用流水记录变化。</p>`,'svAccountForm');
+  $('#svAccountForm').onsubmit=event=>{
+    event.preventDefault();if(!requireVisibleAmounts('保存账户'))return;
+    const current=svAccounts().find(a=>a.id===id);
+    if(stableNote(current)!==snapshot){$('#svDialogError').textContent='账户已在其他地方更新，请重新打开后编辑。';return;}
+    const name=$('#svAccountName').value.trim(),openingCents=svCents($('#svOpeningAmount').value,true);
+    let error=!name?'请输入账户名称。':openingCents===null?'起始余额需为非负金额，最多两位小数（最高 100 亿元）。':'';
+    if(!error&&svAccounts().some(a=>a.id!==id&&a.name===name))error='已有同名账户，请换一个名称。';
+    if(!error)error=svPut('savingsAccounts',{...current,id:current?.id||uid(),name,openingCents,openingDate:$('#svOpeningDate').value,updatedAt:timeEditTimestamp(current)});
+    if(error){$('#svDialogError').textContent=error;return;}
+    finish();toast('存款账户已保存');
+  };
+}
+function svEditEntry(id){
+  if(!requireVisibleAmounts('编辑存款流水'))return;
+  const original=svEntries().find(e=>e.id===id);if(!original)return;
+  const snapshot=stableNote(original),finish=svDialog('编辑存款流水',svEntryFields(original),'svEditForm');
+  $('#svEditKind').onchange=()=>{$('#svEditToField').hidden=$('#svEditKind').value!=='transfer';};
+  $('#svEditForm').onsubmit=event=>{
+    event.preventDefault();if(!requireVisibleAmounts('保存流水'))return;
+    const current=svEntries().find(e=>e.id===id);
+    if(stableNote(current)!==snapshot){$('#svDialogError').textContent='流水已被修改或删除，请重新打开后编辑。';return;}
+    const result=svReadEntry('svEdit',current),error=result.error||svPut('savingsEntries',result.record);
+    if(error){$('#svDialogError').textContent=error;return;}
+    finish();toast('已保存，相关月份余额已重新计算');
+  };
+}
+function svDeleteEntry(id){
+  if(!requireVisibleAmounts('删除存款流水'))return;
+  const original=svEntries().find(e=>e.id===id);if(!original)return;
+  const snapshot=stableNote(original);
+  const finish=svDialog('删除这笔存款流水？',`<p class="sv-hint sv-full">${esc(original.date)} · ${esc({deposit:'存入',withdraw:'取出',transfer:'互转'}[original.kind])} ${svMoney(original.amountCents)}。删除后会重新计算相关月份余额；账户互转的两端会一同撤销。</p>`,'svDeleteConfirm');
+  $('#svDeleteConfirm button[type="submit"]').textContent='确认删除';
+  $('#svDeleteConfirm').onsubmit=event=>{
+    event.preventDefault();if(!requireVisibleAmounts('删除流水'))return;
+    const current=svEntries().find(e=>e.id===id);
+    if(stableNote(current)!==snapshot){$('#svDialogError').textContent='流水已经更新，请关闭后重试。';return;}
+    const timestamp=timeEditTimestamp(current),error=svPut('savingsEntries',{...current,deletedAt:timestamp,updatedAt:timestamp});
+    if(error){$('#svDialogError').textContent=error;return;}finish();toast('流水已删除');
+  };
+}
+function svToggleAccount(id){
+  if(!requireVisibleAmounts('管理存款账户'))return;
+  const current=svAccounts().find(a=>a.id===id);if(!current)return;
+  const error=svPut('savingsAccounts',{...current,archived:!current.archived,updatedAt:timeEditTimestamp(current)});
+  toast(error||(current.archived?'账户已启用':'账户已停用，余额及历史仍保留'));
+}
+function svRenderAccounts(){
+  const accounts=svAccounts(),total=accounts.reduce((sum,a)=>sum+(svBalance(a)||0),0);
+  $('#svTotal').textContent=accounts.length?svMoney(total):'尚未记录';
+  $('#svAsOf').textContent='截至 '+todayStr()+' · '+accounts.length+' 个账户（含停用账户）';
+  $('#svAccounts').innerHTML=accounts.length?accounts.map(a=>`<div class="sv-account-row"><div class="sv-account-main"><b>${esc(a.name)}</b><span>${a.archived?'已停用 · ':''}${esc(a.openingDate)} 起记录</span></div><strong class="sv-number">${svMoney(svBalance(a)||0)}</strong><div class="sv-actions"><button type="button" class="sv-button" data-sv-account="${esc(a.id)}">编辑</button><button type="button" class="sv-button" data-sv-toggle="${esc(a.id)}">${a.archived?'启用':'停用'}</button></div></div>`).join(''):'<p class="sv-empty">还没有存款账户。先添加账户和起始余额，再记录存入或取出。</p>';
+  $$('#svAccounts [data-sv-account]').forEach(b=>b.onclick=()=>svOpenAccount(b.dataset.svAccount));
+  $$('#svAccounts [data-sv-toggle]').forEach(b=>b.onclick=()=>svToggleAccount(b.dataset.svToggle));
+  $$('#svAccounts button').forEach(b=>b.disabled=amountPrivacy);
+  $('#svAddAccount').disabled=amountPrivacy;
+}
+function svRenderStats(){
+  const range=svPeriodRange(),id=$('#svFilterAccount').value;
+  $('#svStats').innerHTML='';$('#svMonths').innerHTML='';
+  if(!range){$('#svPeriodHint').textContent='请选择有效的月份或年份（1900 年起）。';return;}
+  const report=svSummary(range.from,range.to,id);
+  $('#svPeriodHint').textContent=range.from>todayStr()?'未来期间，尚无实际记录。':report.recorded?`${range.from} 至 ${range.to<todayStr()?range.to:todayStr()} · ${id?svAccounts().find(a=>a.id===id)?.name:'全部账户'}`:'这个期间尚未开始记录，不能视为零存款。';
+  if(report.recorded){
+    const items=[['期末余额',report.closing],['净存入',report.net],['存入',report.deposit],['取出',report.withdraw],['期初余额',report.opening],['新增起始余额',report.added]];
+    if(id)items.push(['互转净额',report.transfer]);
+    $('#svStats').innerHTML=items.map(([label,n])=>`<div class="sv-stat"><span>${label}</span><strong>${svMoney(n)}</strong></div>`).join('');
+  }
+  if($('#svMode').value==='year'){
+    const rows=Array.from({length:12},(_,i)=>{
+      const from=range.year+'-'+pad(i+1)+'-01',to=fmtDate(new Date(+range.year,i+1,0)),r=svSummary(from,to,id);
+      const future=from>todayStr(),status=future?'未到期':!r.recorded?'未记录':'';
+      const cell=key=>status?status:svMoney(r[key]);
+      return `<tr><th scope="row">${i+1}月</th><td>${cell('deposit')}</td><td>${cell('withdraw')}</td><td>${cell('net')}</td><td>${cell('closing')}</td></tr>`;
+    }).join('');
+    $('#svMonths').innerHTML=`<p class="sv-hint">各月明细可横向滑动查看；本月余额截至今天。</p><div class="sv-table-scroll" tabindex="0" role="region" aria-label="年度各月存款明细"><table class="sv-table"><caption>${esc(range.year)} 年各月记录</caption><thead><tr><th scope="col">月份</th><th scope="col">存入</th><th scope="col">取出</th><th scope="col">净存入</th><th scope="col">期末余额</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+}
+function svRenderFlows(){
+  const range=svPeriodRange(),account=$('#svFilterAccount').value,kind=$('#svFlowKind').value,keyword=$('#svSearch').value.trim().toLowerCase();
+  const accounts=new Map(svAccounts().map(a=>[a.id,a]));
+  const entries=svEntries().filter(e=>range&&e.date>=range.from&&e.date<=range.to&&(!account||e.accountId===account||e.toAccountId===account)&&(!kind||e.kind===kind)&&(!keyword||String(e.note||'').toLowerCase().includes(keyword))).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+  const pages=Math.max(1,Math.ceil(entries.length/SV_PAGE_SIZE));svPage=Math.min(svPage,pages-1);
+  $('#svFlowCount').textContent=entries.length+' 笔';
+  $('#svFlows').innerHTML=entries.slice(svPage*SV_PAGE_SIZE,(svPage+1)*SV_PAGE_SIZE).map(e=>{
+    const type={deposit:'存入',withdraw:'取出',transfer:'互转'}[e.kind],from=accounts.get(e.accountId)?.name||'账户缺失';
+    return `<article class="sv-flow"><div class="sv-flow-head"><b>${type}</b><strong class="sv-number">${svMoney(e.amountCents)}</strong></div><p>${esc(from)}${e.kind==='transfer'?' → '+esc(accounts.get(e.toAccountId)?.name||'账户缺失'):''}</p><p class="sv-hint">${esc(e.date)}${e.note?' · '+esc(ledgerNoteDisplay(e.note)):''}</p><div class="sv-actions"><button type="button" class="sv-button" data-sv-edit="${esc(e.id)}">编辑</button><button type="button" class="sv-button" data-sv-delete="${esc(e.id)}">删除</button></div></article>`;
+  }).join('')||'<p class="sv-empty">当前条件下没有流水。可切换期间、账户或筛选条件。</p>';
+  $$('#svFlows [data-sv-edit]').forEach(b=>b.onclick=()=>svEditEntry(b.dataset.svEdit));
+  $$('#svFlows [data-sv-delete]').forEach(b=>b.onclick=()=>svDeleteEntry(b.dataset.svDelete));
+  $$('#svFlows button').forEach(b=>b.disabled=amountPrivacy);
+  $('#svPagination').innerHTML=pages>1?`<button type="button" class="sv-button" id="svPrev"${svPage===0?' disabled':''}>上一页</button><span>${svPage+1} / ${pages}</span><button type="button" class="sv-button" id="svNext"${svPage===pages-1?' disabled':''}>下一页</button>`:'';
+  if($('#svPrev'))$('#svPrev').onclick=()=>{svPage--;svRenderFlows();};
+  if($('#svNext'))$('#svNext').onclick=()=>{svPage++;svRenderFlows();};
+}
+function renderSavings(){
+  if(!$('#savingsSec'))return;
+  const accounts=svAccounts();
+  svRenderAccounts();
+  svRefreshSelect('#svAccount',accounts.filter(a=>!a.archived));
+  svRefreshSelect('#svToAccount',accounts.filter(a=>!a.archived));
+  svRefreshSelect('#svFilterAccount',accounts,true);
+  $('#svDate').max=todayStr();
+  $('#svToField').hidden=$('#svKind').value!=='transfer';
+  $('#svEntryForm').hidden=amountPrivacy||!accounts.some(a=>!a.archived);
+  $('#svEntryHint').textContent=amountPrivacy?'金额已隐藏，关闭顶部金额隐私后可记一笔。':accounts.some(a=>!a.archived)?'存入和取出仅影响存款余额，不会自动生成日常收支。':'请先添加或启用一个账户。';
+  const error=svValidate(S);
+  $('#svIntegrity').hidden=!error;
+  $('#svIntegrity').textContent=error?'记录需要核对：'+maskMoneyText(error)+' 当前余额可能异常，请检查历史流水。':'';
+  svRenderStats();svRenderFlows();
+}
+$('#svAddAccount').onclick=()=>svOpenAccount();
+$('#svDate').value=todayStr();$('#svPeriod').value=todayStr().slice(0,7);
+$('#svKind').onchange=()=>{$('#svToField').hidden=$('#svKind').value!=='transfer';$('#svEntryError').textContent='';};
+$('#svEntryForm').onsubmit=event=>{
+  event.preventDefault();if(!requireVisibleAmounts('保存存款流水'))return;
+  const result=svReadEntry(),error=result.error||svPut('savingsEntries',result.record);
+  if(error){$('#svEntryError').textContent=error;return;}
+  $('#svAmount').value='';$('#svNote').value='';$('#svEntryError').textContent='';
+  $('#svPeriod').value=$('#svMode').value==='year'?result.record.date.slice(0,4):result.record.date.slice(0,7);
+  $('#svFlowKind').value='';$('#svSearch').value='';$('#svFilterAccount').value='';svPage=0;
+  svRenderStats();svRenderFlows();toast('存款流水已保存');
+};
+$('#svMode').onchange=()=>{
+  const year=$('#svPeriod').value.slice(0,4)||todayStr().slice(0,4);
+  if($('#svMode').value==='year'){$('#svPeriod').type='number';$('#svPeriod').min='1900';$('#svPeriod').max='9999';$('#svPeriod').value=year;}
+  else{$('#svPeriod').type='month';$('#svPeriod').removeAttribute('min');$('#svPeriod').removeAttribute('max');$('#svPeriod').value=year+'-'+todayStr().slice(5,7);}
+  svPage=0;svRenderStats();svRenderFlows();
+};
+for(const id of ['svPeriod','svFilterAccount','svFlowKind'])$('#'+id).onchange=()=>{svPage=0;svRenderStats();svRenderFlows();};
+$('#svSearch').oninput=()=>{svPage=0;svRenderFlows();};
 /* ============ 资金管理（v3.20.23 demo） ============ */
 const FM_DEFAULT_DIRS=[
   {id:'d_free',name:'自由支配',color:'#5a7a8a'},
@@ -3795,7 +4146,7 @@ function openCatManager(type){
   $('#modalBox').classList.add('wide');
   if(isExp){
     $$('#budgetCatList .budgetSw').forEach(sw=>{
-      sw.onchange=()=>{setCatBudget('expense',sw.dataset.cat,sw.checked);renderCats();renderMonthStat();renderTodayStat();renderFocusCard();renderPies(flowFiltered())};
+      sw.onchange=()=>{setCatBudget('expense',sw.dataset.cat,sw.checked);renderCats();renderMonthStat();renderTodayStat();renderFocusCard();renderPies(flowFiltered());renderExpenseAnalysis()};
     });
     $$('#budgetCatList .del-cat').forEach(x=>x.onclick=()=>deleteCustomCat('expense',x.dataset.del));
   }
@@ -3815,6 +4166,7 @@ function openCatManager(type){
     if(!S.customCats)S.customCats={expense:[],income:[]};
     if(!Array.isArray(S.customCats[type]))S.customCats[type]=[];
     S.customCats[type].push({name:n,color:pickC,inBudget:true});
+    ledgerSettingTouch('custom:'+type+':'+n);
     persist();
     curType=type;curCat=n;
     closeModal();renderCats();toast('已添加类型「'+n+'」');
@@ -3828,6 +4180,7 @@ function deleteCustomCat(type,name){
     +'<div class="btns"><button class="cancel" onclick="closeModal()">取消</button><button class="ok" id="ccDel" style="background:var(--bad)">删除</button></div>');
   $('#ccDel').onclick=()=>{
     S.customCats[type]=customCats(type).filter(c=>c.name!==name);
+    ledgerSettingTouch('custom:'+type+':'+name);
     if(curCat===name)curCat=null;
     persist();closeModal();renderCats();renderMoney();renderPies(flowFiltered());toast('已删除');
   };
@@ -4153,6 +4506,130 @@ $('#flowTo').onchange=()=>{$$('#flowQuick .quick-chip').forEach(b=>b.classList.r
 $('#flowKw').addEventListener('input',()=>renderFlow());
 $$('#flowQuick .quick-chip').forEach(b=>b.onclick=()=>{const[f,t]=rangeOf(b.dataset.r);setFlowRange(f,t,b.dataset.r);renderFlow()});
 $$('#flowType .quick-chip').forEach(b=>b.onclick=()=>{flowKind=b.dataset.t;flowPage=1;$$('#flowType .quick-chip').forEach(x=>x.classList.remove('on'));b.classList.add('on');renderFlow()});
+/* ============ 账本支出分析：按当前预算分类从账单实时计算 ============ */
+function expenseTotals(samples){
+  return samples.reduce((sum,x)=>({
+    included:sum.included+x.included,
+    excluded:sum.excluded+x.excluded
+  }),{included:0,excluded:0});
+}
+
+function expenseAverage(samples,multiplier=1){
+  if(!samples.length)return null;
+  const total=expenseTotals(samples);
+  return {
+    included:Math.round(total.included*multiplier/samples.length),
+    excluded:Math.round(total.excluded*multiplier/samples.length)
+  };
+}
+
+function expenseBudgetSuggestion(samples,multiplier=1){
+  const average=expenseAverage(samples,multiplier);
+  return average&&{included:Math.max(0,average.included),excluded:Math.max(0,average.excluded)};
+}
+
+function expenseHistory(today){
+  const months=new Map(),yearMonths=new Map();
+  for(const entry of S.ledger){
+    if(entry?.type!=='expense'||!Number.isFinite(entry.amount)||!timeValidDay(entry.date)||entry.date>today)continue;
+    const month=entry.date.slice(0,7);
+    if(!months.has(month))months.set(month,{included:0,excluded:0});
+    const key=catInBudget('expense',entry.category)?'included':'excluded';
+    months.get(month)[key]+=Math.round(entry.amount*100);
+  }
+  for(const [month,amounts] of months){
+    const year=month.slice(0,4);
+    if(!yearMonths.has(year))yearMonths.set(year,[]);
+    yearMonths.get(year).push(amounts);
+  }
+  const years=new Map([...yearMonths].map(([year,samples])=>[year,{...expenseTotals(samples),monthCount:samples.length}]));
+  return {months,years};
+}
+
+function expenseAnalysisModel(today){
+  const {months,years}=expenseHistory(today);
+  const thisMonth=today.slice(0,7),thisYear=today.slice(0,4);
+  const [year,month]=thisMonth.split('-').map(Number);
+  const recentStart=fmtDate(new Date(year,month-13,1)).slice(0,7);
+  const closedMonths=[...months.keys()].filter(key=>key<thisMonth).sort().reverse();
+  const closedYears=[...years.keys()].filter(key=>key<thisYear).sort().reverse();
+  const recentMonths=closedMonths.filter(key=>key>=recentStart);
+  const recentYears=closedYears.filter(key=>Number(key)>=year-3&&years.get(key).monthCount===12);
+  const monthlyBudgetKeys=recentMonths.slice(0,3);
+  const nextMonthDate=new Date(year,month,1);
+  const monthName=key=>Number(key.slice(0,4))+'年'+Number(key.slice(5))+'月';
+  return {
+    months,years,thisMonth,thisYear,
+    month:{
+      average:expenseAverage(closedMonths.map(key=>months.get(key))),
+      averageSource:'按 '+closedMonths.length+' 个已结束且有支出记录的月份计算',
+      next:nextMonthDate.getFullYear()+'年'+(nextMonthDate.getMonth()+1)+'月',
+      suggestion:expenseBudgetSuggestion(monthlyBudgetKeys.map(key=>months.get(key))),
+      source:monthlyBudgetKeys.length?'过去 12 个已结束月份中，最近 '+monthlyBudgetKeys.length+' 个有记录月份的平均：'+monthlyBudgetKeys.map(monthName).join('、'):'过去 12 个已结束月份暂无支出记录'
+    },
+    year:{
+      average:expenseAverage(closedYears.map(key=>years.get(key))),
+      averageSource:'按 '+closedYears.length+' 个已结束且有支出记录的年份计算，年份可能有缺月',
+      next:(year+1)+'年',
+      suggestion:recentYears.length?expenseBudgetSuggestion(recentYears.map(key=>years.get(key))):expenseBudgetSuggestion(recentMonths.map(key=>months.get(key)),12),
+      source:recentYears.length?'近 3 个已结束年份中，按 '+recentYears.join('、')+' 年的年均计算（各有 12 个月记录）':recentMonths.length?'估算：过去 12 个已结束月份中，'+recentMonths.length+' 个有记录月份的平均 × 12':'近期没有足够的历史支出记录'
+    }
+  };
+}
+
+function expenseAmountCells(amounts){
+  if(!amounts)return '<td>—</td><td>—</td><td>—</td>';
+  return [amounts.included,amounts.excluded,amounts.included+amounts.excluded]
+    .map(cents=>`<td>${money(cents/100)}</td>`).join('');
+}
+
+function expenseTable(caption,firstColumn,rows){
+  return `<div class="ea-scroll" tabindex="0" role="region" aria-label="${caption}">
+    <table class="ea-table"><caption>${caption}</caption><thead><tr><th scope="col">${firstColumn}</th>
+    <th scope="col">计入预算</th><th scope="col">不计入预算</th><th scope="col">合计</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function renderExpenseAnalysis(){
+  const result=$('#eaResults');
+  $('#eaFilters').hidden=amountPrivacy;
+  if(amountPrivacy){
+    result.innerHTML='<div class="amount-chart-cover">支出分析已隐藏</div>';
+    return;
+  }
+  if($('#page-money').dataset.moneyView!=='analysis')return;
+  const model=expenseAnalysisModel(todayStr());
+  const {months,years,thisMonth,thisYear}=model;
+  const byMonth=$('#eaMode').value==='month';
+  const yearSelect=$('#eaYear'),selected=yearSelect.value||thisYear;
+  const yearKeys=[...new Set([thisYear,...years.keys()])].sort().reverse();
+  if([...yearSelect.options].map(option=>option.value).join()!==yearKeys.join()){
+    yearSelect.replaceChildren(...yearKeys.map(key=>new Option(key+' 年',key)));
+  }
+  yearSelect.value=yearKeys.includes(selected)?selected:thisYear;
+  $('#eaYearField').hidden=!byMonth;
+  const year=yearSelect.value,period=byMonth?model.month:model.year;
+  const row=(label,amounts,detail='')=>`<tr><th scope="row">${label}${detail?`<small>${detail}</small>`:''}</th>${expenseAmountCells(amounts)}</tr>`;
+  const summary=expenseTable('历史平均与预算建议','指标',
+    row(byMonth?'平均月支出':'平均年支出',period.average)+row(period.next+'预算建议',period.suggestion));
+  const keys=byMonth?Array.from({length:year===thisYear?Number(thisMonth.slice(5)):12},
+    (_,i)=>year+'-'+String(i+1).padStart(2,'0')).reverse():yearKeys;
+  const history=keys.map(key=>{
+    const amounts=(byMonth?months:years).get(key);
+    const ongoing=key===(byMonth?thisMonth:thisYear);
+    const detail=[ongoing?'截至今日':'',!byMonth&&amounts?`有记录 ${amounts.monthCount}/12 月`:'',!amounts?'无记录':''].filter(Boolean).join(' · ');
+    return row(byMonth?Number(key.slice(5))+' 月':key+' 年',amounts,detail);
+  }).join('');
+  result.innerHTML=summary+
+    `<div class="ea-notes"><p>${period.average?period.averageSource:'暂无可计算平均值的已结束期间'}</p>
+    <p>${period.suggestion?'建议依据：':''}${period.source}。</p></div>`+
+    expenseTable(byMonth?year+' 年各月实际支出':'历年实际支出',byMonth?'月份':'年份',history)+
+    '<p class="ea-note">按当前「计入月预算」设置划分历史账单。无支出记录显示为「—」。建议供参考，账本预算仍需手动调整。</p>';
+}
+
+$('#eaMode').onchange=renderExpenseAnalysis;
+$('#eaYear').onchange=renderExpenseAnalysis;
+
 function monthSum(ms){
   let inc=0,exp=0;S.ledger.filter(x=>x.date.startsWith(ms)).forEach(x=>{if(x.type==='income')inc+=x.amount;else exp+=x.amount});
   return{inc,exp};
@@ -5641,6 +6118,13 @@ function mergeData(d){
     return added>0?`<span class="qn-pv-chip">新增 <b>${added}</b>条${label}</span>`:'';
   };
   const timeChips=[countTimeRecords('timeEntries','实际用时'),countTimeRecords('dailyTimeReviews','每日复盘')].filter(Boolean);
+  let savingsMerged=false;
+  for(const field of ['savingsAccounts','savingsEntries']){
+    if(!Array.isArray(d[field]))continue;
+    const records=svMergeRecords(S[field],d[field]);
+    if(stableNote(records)!==stableNote(svRecords(field)))savingsMerged=true;
+    S[field]=records;
+  }
   if(Array.isArray(d.ledger))d.ledger.forEach(t=>{if(t.id&&!S.ledger.some(x=>x.id===t.id)){S.ledger.push(t);add.ledger++}});
   if(Array.isArray(d.notes))d.notes.forEach(t=>{if(t.id&&!S.notes.some(x=>x.id===t.id)){S.notes.push(t);add.notes++}});
   if(Array.isArray(d.countdowns))d.countdowns.forEach(t=>{if(t.id&&!S.countdowns.some(x=>x.id===t.id)){S.countdowns.push(t);add.countdowns++}});
@@ -5662,15 +6146,10 @@ function mergeData(d){
     }else{S.habits.push(structuredClone(h));add.habits++}
   });
   if(d.moods&&typeof d.moods==='object')Object.keys(d.moods).forEach(k=>{if(!S.moods[k]){S.moods[k]=d.moods[k];add.moods++}});
-  if(d.customCats&&typeof d.customCats==='object'){
-    ['expense','income'].forEach(tp=>{
-      if(!Array.isArray(d.customCats[tp]))return;
-      if(!S.customCats)S.customCats={expense:[],income:[]};
-      if(!Array.isArray(S.customCats[tp]))S.customCats[tp]=[];
-      d.customCats[tp].forEach(c=>{if(c&&c.name&&!S.customCats[tp].some(x=>x.name===c.name))S.customCats[tp].push({name:c.name,color:c.color||'#888888'})});
-    });
-  }
+  const settingsMerged=mergeLedgerSettings(d);
   const chips=[...timeChips];
+  if(settingsMerged)chips.push('<span class="qn-pv-chip">账本预算与分类设置已合并</span>');
+  if(savingsMerged)chips.push('<span class="qn-pv-chip">存款账户与流水已合并</span>');
   if(add.todos)chips.push(`<span class="qn-pv-chip">新增 <b>${add.todos}</b>条待办</span>`);
   if(add.ledger)chips.push(`<span class="qn-pv-chip">新增 <b>${add.ledger}</b>笔账目</span>`);
   if(add.notes)chips.push(`<span class="qn-pv-chip">新增 <b>${add.notes}</b>条备忘</span>`);
@@ -5689,12 +6168,12 @@ $('#budgetBtn').onclick=()=>{
     <div class="field"><span class="lab" style="width:40px">¥</span><input id="bIn" type="number" inputmode="decimal" class="input-styled" value="${S.budget||''}" placeholder="如 3000"></div>
     <p class="muted" style="margin:0 0 10px">设为 0 表示不使用预算</p>
     <div class="btns"><button class="cancel" onclick="confirmClose(()=>{$('#bSave').click()})">关闭</button><button class="ok" id="bSave">保存</button></div>`,{noMaskClose:true});
-  $('#bSave').onclick=()=>{S.budget=Math.max(0,parseFloat($('#bIn').value)||0);closeModal();persist();renderMonthStat();renderFocusCard();toast('预算已更新')};
+  $('#bSave').onclick=()=>{S.budget=Math.max(0,parseFloat($('#bIn').value)||0);ledgerSettingTouch('budget');closeModal();persist();renderMonthStat();renderFocusCard();toast('预算已更新')};
 };
 $('#clearBtn').onclick=()=>{
   const syncOn=syncActive();
   modal(`<h4>清空全部数据<span class="modal-close" onclick="closeModal()">×</span></h4>
-    <p style="color:var(--text-2)">将删除所有待办、习惯、账目、心情、备忘、倒计日、工作日志及本机番茄时钟与记录，<b>不可恢复</b>。</p>
+    <p style="color:var(--text-2)">将删除所有待办、习惯、账目、存款账户与流水、心情、备忘、倒计日、工作日志及本机番茄时钟与记录，<b>不可恢复</b>。</p>
     ${syncOn?'<div class="privacy-box" style="margin:8px 0"><b>云同步已开启</b><br>清空后空数据会自动推送到云端，所有设备都会同步清空。</div>':''}
     <div class="field"><span class="lab" style="width:60px">确认</span><input id="cIn" class="input-styled" placeholder='输入"清空"'></div>
     <div class="btns"><button class="cancel" onclick="closeModal()">取消</button><button class="ok" id="cOk" style="background:var(--bad)" disabled>清空</button></div>`,{noMaskClose:true});
@@ -6081,6 +6560,8 @@ function renderSyncHistoryPreview(st){
   };
   push('工作日志',st.worklog,x=>`${esc(x.date)} ${esc(x.time||'')} ${esc(maskMoneyText(String(x.text||'')).slice(0,60))}`);
   push('账目',st.ledger,x=>`${esc(x.date)} ${x.type==='income'?'收入':'支出'} ${esc(x.category||'')} ${money(x.amount)}${x.note?' · '+esc(ledgerNoteDisplay(x.note)):''}`);
+  push('存款账户',svAccounts(st),x=>`${esc(maskMoneyText(x.name))} · 起始 ${esc(x.openingDate)} · ${svMoney(x.openingCents)}`);
+  push('存款流水',svEntries(st),x=>`${esc(x.date)} ${esc({deposit:'存入',withdraw:'取出',transfer:'互转'}[x.kind]||'未知类型')} ${svMoney(x.amountCents)}${x.note?' · '+esc(ledgerNoteDisplay(x.note)):''}`);
   push('待办',st.todos,x=>`${esc(x.date)} ${x.done?'✓':'○'} ${esc(maskMoneyText(String(x.text||'')).slice(0,60))}`);
   push('习惯',st.habits,x=>`${esc(x.name||'')} ${Object.keys(x.history||{}).length}天`);
   push('备忘',st.notes,x=>`${esc(maskMoneyText(String(x.content||x.title||'')).slice(0,60))}${x.done?' ✓':''}`);
@@ -6094,7 +6575,7 @@ async function cloudPush(){
   if(TEST_BUILD)return;
   /* 数据安全红线：带演示/测试数据标记（_demoSeeded）的本机状态一律禁止上传云端。
      自动预置的示例数据会打上该标记，正式库永不预置；历史残留设备需先清空本机数据再登录。 */
-  if(S&&S._demoSeeded){setSyncStatus('err');toast('本机含演示数据，已阻止上传云端；请先「我的 → 数据管理 → 清空全部数据」');return;}
+  if(S&&S._demoSeeded&&!MOCK_SYNC){setSyncStatus('err');toast('本机含演示数据，已阻止上传云端；请先「我的 → 数据管理 → 清空全部数据」');return;}
   const p=currentProfile();
   if(!p||!p.binId||!sessionPasscode||syncBusy)return;
   syncBusy=true;setSyncStatus('sync');
@@ -6230,7 +6711,7 @@ function runProdNoteMergeChecks(){
 /* 按 id 合并本地与云端：本地已有记录永不删除，只补回云端有而本地没有的记录
    —— 根治原 last-write-wins 整覆盖导致跨设备丢数据的问题（如某笔账本地未上云被云端旧版本覆盖） */
 function mergeState(remote){
-  let changed=false;
+  let changed=mergeLedgerSettings(remote);
   const unionArr=(loc,rem)=>{
     const map=new Map();
     (loc||[]).forEach(x=>{if(x&&x.id)map.set(x.id,x)});
@@ -6303,6 +6784,12 @@ function mergeState(remote){
     S.habits=[...map.values()];
   }());
   S.ledger=unionArr(S.ledger,remote.ledger);
+  for(const field of ['savingsAccounts','savingsEntries']){
+    if(!Array.isArray(remote[field]))continue;
+    const records=svMergeRecords(S[field],remote[field]);
+    if(stableNote(records)!==stableNote(svRecords(field)))changed=true;
+    S[field]=records;
+  }
   /* 自定义快捷备注（v3.18）：按名称并集合并，任一端添加即同步 */
   if(Array.isArray(remote.quickNotes)){
     const qnSet=new Set(S.quickNotes||[]);
@@ -6378,7 +6865,7 @@ async function cloudPull(opts={}){
     const applied=applyPulledState(remote,replaceLocal);
 /* MOCK_PRESENTATION_START */
     // Mock 日预算验收：新来源接收月预算设置；不改变正式模式的合并行为。
-    if(MOCK_SYNC&&Number.isFinite(remote.budget)&&remote.budget>=0&&S.budget!==remote.budget){S.budget=remote.budget;applied.changed=true;}
+    // Budget and category settings use mergeLedgerSettings in all modes.
 /* MOCK_PRESENTATION_END */
     if(applied.replaced){
       /* 仅用户明确恢复操作可请求整库替换。 */
@@ -6530,7 +7017,8 @@ function normalizeState(d){
 function syncStateSummary(d){
   d=normalizeState(d||{});
   const moodDays=d.moods?Object.keys(d.moods).length:0;
-  return `待办 ${d.todos.length}｜习惯 ${d.habits.length}｜账目 ${d.ledger.length}｜工作日志 ${d.worklog.length}｜备忘 ${d.notes.length}｜心情 ${moodDays} 天｜倒计日 ${d.countdowns.length}`;
+  const savings=svRecords('savingsAccounts',d).length||svRecords('savingsEntries',d).length?`｜存款账户 ${svAccounts(d).length}｜存款流水 ${svEntries(d).length}`:'';
+  return `待办 ${d.todos.length}｜习惯 ${d.habits.length}｜账目 ${d.ledger.length}｜工作日志 ${d.worklog.length}｜备忘 ${d.notes.length}｜心情 ${moodDays} 天｜倒计日 ${d.countdowns.length}${savings}`;
 }
 async function fetchGistRevision(version){
   const p=currentProfile();
@@ -7294,10 +7782,12 @@ const MODULES=[
   {id:'todayMoney',name:'今日账目',page:'today'},
   {id:'moneyForm',name:'记一笔',page:'money'},
   {id:'monthOverview',name:'本月概览',page:'money'},
+  {id:'expenseAnalysis',name:'年／月支出分析',page:'money'},
   {id:'catExpense',name:'分类支出',page:'money'},
   {id:'flowList',name:'流水记录',page:'money'},
   {id:'fundManager',name:'资金管理',page:'money'},
   {id:'assets',name:'总资产',page:'money'},
+  {id:'savings',name:'存款记录',page:'money'},
   {id:'mood',name:'今日心情',page:'heat'},
   {id:'heatmap',name:'年度活跃热力图',page:'heat'},
   {id:'countdown',name:'倒计日',page:'heat'},
@@ -7315,7 +7805,14 @@ function defaultModuleConfig(){return MODULES.map(x=>({id:x.id,visible:true}))}
 function normalizeModules(arr){
   const base=Array.isArray(arr)?arr:[];
   const seen=new Set(base.map(x=>x&&x.id));
-  MODULES.forEach(m=>{if(!seen.has(m.id)){const entry={id:m.id,visible:true};if(m.id==='pomodoro')base.unshift(entry);else base.push(entry)}});
+  MODULES.forEach(m=>{
+    if(seen.has(m.id))return;
+    const entry={id:m.id,visible:true};
+    const before=m.id==='expenseAnalysis'?base.findIndex(x=>x?.id==='catExpense'):-1;
+    if(m.id==='pomodoro')base.unshift(entry);
+    else if(before>=0)base.splice(before,0,entry);
+    else base.push(entry);
+  });
   return base.filter(x=>x&&MODULES.some(m=>m.id===x.id)).map(x=>({id:x.id,visible:!!x.visible}));
 }
 function loadModuleConfig(){
@@ -7389,7 +7886,7 @@ const _sr=$('#storageRestoreBtn');if(_sr)_sr.onclick=restoreLocalSnapshot;
 function syncStickyOffsets(){const hdr=document.querySelector('header.topbar');if(hdr)document.documentElement.style.setProperty('--topbar-h',Math.ceil(hdr.getBoundingClientRect().height)+'px');const sw=$('#moneyViewSwitch');if(sw&&sw.getBoundingClientRect().height)document.documentElement.style.setProperty('--money-switch-h',Math.ceil(sw.getBoundingClientRect().height)+'px')}
 syncStickyOffsets();window.addEventListener('resize',syncStickyOffsets);if(window.ResizeObserver){const _stickyRO=new ResizeObserver(syncStickyOffsets);const _stickyHdr=document.querySelector('header.topbar');if(_stickyHdr)_stickyRO.observe(_stickyHdr)}
 const MONEY_VIEW_KEY='wb_money_view_v1';
-function setMoneyView(v){const page=$('#page-money');if(!page)return;const allowed=['entry','analysis','plan'];if(!allowed.includes(v))v='entry';page.dataset.moneyView=v;try{localStorage.setItem(MONEY_VIEW_KEY,v)}catch(e){}$$('#moneyViewSwitch button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));if($('#page-money').classList.contains('active'))window.scrollTo({top:0,behavior:'auto'})}
+function setMoneyView(v){const page=$('#page-money');if(!page)return;const allowed=['entry','analysis','plan','savings'];if(!allowed.includes(v))v='entry';page.dataset.moneyView=v;try{localStorage.setItem(MONEY_VIEW_KEY,v)}catch(e){}$$('#moneyViewSwitch button').forEach(b=>{b.classList.toggle('on',b.dataset.v===v);b.setAttribute('aria-pressed',String(b.dataset.v===v))});if(v==='savings')renderSavings();if(v==='analysis')renderExpenseAnalysis();if($('#page-money').classList.contains('active'))window.scrollTo({top:0,behavior:'auto'})}
 $$('#moneyViewSwitch button').forEach(b=>b.onclick=()=>setMoneyView(b.dataset.v));
 try{setMoneyView(localStorage.getItem(MONEY_VIEW_KEY)||'entry')}catch(e){setMoneyView('entry')}
 const _todayJump=(id,fn)=>{const el=$(id);if(el)el.onclick=fn};
@@ -9172,6 +9669,12 @@ initFilters();
 renderAll();
 if(MOCK_SYNC&&location.hash==='#time-quadrants'){
   goTab('notes');setTimeQuadrantView(true);
+}
+if(MOCK_SYNC&&location.hash==='#savings'){
+  goTab('money');setMoneyView('savings');
+}
+if(MOCK_SYNC&&location.hash==='#expense-analysis'){
+  goTab('money');setMoneyView('analysis');scrollTodayModule('#expenseAnalysisSec');
 }
 
 /* v3.20.3: 学习方向卡全局 click 事件委托（替代 inline onclick，绕开 iOS PWA 缓存断链） */
