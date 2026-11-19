@@ -2419,7 +2419,7 @@ function setAmountPrivacy(enabled){
   if($('#histPreviewBack'))closeModal();
   if(enabled){
     ledgerAmountDraft=$('#amtIn').value;
-    if($('#modalBox :is(#bIn,#elAmt,#qnText,#ipText,#mpText,#expDl,#reportText,#hisExpText,#lnExpText,#svAccountForm,#svEditForm,#svDeleteConfirm)'))closeModal();
+    if($('#modalBox :is(#bIn,#elAmt,#qnText,#ipText,#mpText,#expDl,#reportText,#hisExpText,#lnExpText,#svAccountForm,#svEditForm,#svDeleteConfirm,#svPositionForm,#svGoalsForm)'))closeModal();
   }
   amountPrivacy=enabled;
   applyAmountControls();
@@ -2819,7 +2819,7 @@ const KEY='lifeworkbench_v1';
 const DEFAULT={
   version:3,
   todos:[], habits:[], ledger:[], budget:0,
-  savingsAccounts:[], savingsEntries:[],
+  savingsAccounts:[], savingsEntries:[], savingsPositions:[],
   moods:{}, notes:[], countdowns:[], worklog:[],
   timeEntries:[], dailyTimeReviews:[],
   customCats:{expense:[],income:[]},
@@ -3187,8 +3187,6 @@ const SUBMODULES={
     {id:'expenseAnalysis',label:'年／月支出分析',ic:'M3 3v18h18M7 17v-5M12 17V8M17 17V5'},
     {id:'catExpense',label:'分类支出',ic:'M21 21H4.6c-.56 0-.84 0-1.05-.11a1 1 0 0 1-.44-.44C3 20.24 3 19.96 3 19.4V3'},
     {id:'flowList',label:'账单明细',ic:'M9 5h11M9 12h11M9 19h11M5 5h.01M5 12h.01M5 19h.01'},
-    {id:'fundManager',label:'资金管理',ic:'M3 3h18v18H3zM3 9h18M9 3v18'},
-    {id:'assets',label:'总资产',ic:'M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z'},
     {id:'savings',label:'存款记录',ic:'M3 7h18v14H3zM7 7V3h10v4M3 12h18M9 16h6'}
   ],
   heat:[
@@ -3236,7 +3234,7 @@ function renderSidebar(tabKey){
       const id=it.dataset.mod,secId=it.dataset.secid;
       if(tabKey==='money'){
         if(id==='expenseAnalysis')setMoneyView('analysis');
-        else if(id==='savings'||$('#page-money').dataset.moneyView==='savings')setMoneyView(id==='savings'?'savings':['fundManager','assets'].includes(id)?'plan':['catExpense','flowList'].includes(id)?'analysis':'entry');
+        else if(id==='savings'||$('#page-money').dataset.moneyView==='savings')setMoneyView(id==='savings'?'savings':['fundManager','assets'].includes(id)?'savings':['catExpense','flowList'].includes(id)?'analysis':'entry');
       }
       const sel=secId?'#'+secId:'.sec[data-module="'+id+'"]';
       const t=$(sel);if(!t)return;
@@ -3598,7 +3596,7 @@ $('#focusBudgetToggle').onclick=()=>{
 /* ============ 账本 ============ */
 let curType='expense',curCat=null,curMonth=new Date();
 function renderMoney(){
-  renderCats();renderFlow();renderMonthStat();renderCatChart();renderTodayStat();renderNoteQuickRow();renderFundManager();renderAssets();renderFocusCard();renderSavings();renderExpenseAnalysis();
+  renderCats();renderFlow();renderMonthStat();renderCatChart();renderTodayStat();renderNoteQuickRow();renderFundManager();renderFocusCard();renderSavings();renderExpenseAnalysis();
 }
 /* ============ 存款：独立账户与流水，金额以整数分保存 ============ */
 const SV_LIMIT=1000000000000,SV_PAGE_SIZE=20;
@@ -3641,6 +3639,10 @@ function svValidate(state){
     if(!['deposit','withdraw','transfer'].includes(e.kind)||!svDay(e.date)||e.date>todayStr()||!Number.isSafeInteger(e.amountCents)||e.amountCents<=0||e.amountCents>SV_LIMIT)return '流水的类型、日期或金额无效，请核对记录。';
     if(!a||e.date<a.openingDate)return '流水日期不能早于账户起始日期，且账户必须存在。';
     if(e.kind==='transfer'&&(!to||a.id===to.id||e.date<to.openingDate))return '互转需要两个不同账户，日期不能早于任一账户起始日期。';
+  }
+  for(const position of svPositions(state)){
+    if(!['asset','liability','linked','ignored'].includes(position.kind)||!String(position.name||'').trim()||!Number.isSafeInteger(position.amountCents)||position.amountCents<0||position.amountCents>SV_LIMIT)return '资产或负债记录的名称、类型及金额无效，请核对。';
+    if(position.kind==='linked'&&!map.has(position.accountId))return '旧资产关联的存款账户不存在，请重新核对关联。';
   }
   for(const a of accounts){
     const days=new Map();
@@ -3852,7 +3854,7 @@ function renderSavings(){
   const error=svValidate(S);
   $('#svIntegrity').hidden=!error;
   $('#svIntegrity').textContent=error?'记录需要核对：'+maskMoneyText(error)+' 当前余额可能异常，请检查历史流水。':'';
-  svRenderStats();svRenderFlows();
+  svRenderStats();svRenderFlows();svRenderWealth();svRenderGoals();
 }
 $('#svAddAccount').onclick=()=>svOpenAccount();
 $('#svDate').value=todayStr();$('#svPeriod').value=todayStr().slice(0,7);
@@ -3874,6 +3876,150 @@ $('#svMode').onchange=()=>{
 };
 for(const id of ['svPeriod','svFilterAccount','svFlowKind'])$('#'+id).onchange=()=>{svPage=0;svRenderStats();svRenderFlows();};
 $('#svSearch').oninput=()=>{svPage=0;svRenderFlows();};
+
+/* ============ Unified saving goals and wealth; legacy records await explicit classification. ============ */
+function svPositions(state=S){return svRecords('savingsPositions',state).filter(x=>!x.deletedAt);}
+function svLegacyItems(state=S){
+  const handled=new Set(svRecords('savingsPositions',state).map(x=>x.legacyRef).filter(Boolean));
+  const items=[];
+  for(const [field,kind] of [['assets','asset'],['liabilities','liability']]){
+    const records=Array.isArray(state.fundMgr?.[field])?state.fundMgr[field]:[];
+    records.forEach((record,index)=>{
+      const legacyRef=kind+':'+String(record.id??index);
+      if(!handled.has(legacyRef))items.push({legacyRef,kind,name:String(record.name||'旧记录'),amountCents:svCents(String(record.amount??0),true)});
+    });
+  }
+  return items;
+}
+function svWealth(state=S){
+  const deposit=svAccounts(state).reduce((sum,a)=>sum+(svBalance(a,todayStr(),state)||0),0);
+  const positions=svPositions(state);
+  const other=positions.filter(x=>x.kind==='asset').reduce((sum,x)=>sum+x.amountCents,0);
+  const debt=positions.filter(x=>x.kind==='liability').reduce((sum,x)=>sum+x.amountCents,0);
+  return {deposit,other,debt,total:deposit+other,net:deposit+other-debt};
+}
+function svPositionDialog(id,kind='asset',legacyRef=''){
+  if(!requireVisibleAmounts('管理资产与负债'))return;
+  const current=svPositions().find(x=>x.id===id);
+  const legacy=svLegacyItems().find(x=>x.legacyRef===legacyRef);
+  if(id&&!current)return;
+  const snapshot=stableNote(current);
+  const value=current||legacy||{kind,name:'',amountCents:0};
+  const options=[['asset','其他资产'],['liability','负债'],['linked','已包含在存款账户'],['ignored','暂不计入汇总']]
+    .map(([key,label])=>'<option value="'+key+'"'+(value.kind===key?' selected':'')+'>'+label+'</option>').join('');
+  const body='<label class="sv-full">名称<input id="svPositionName" maxlength="40" required value="'+esc(value.name)+'"></label>'
+    +'<label class="sv-full">归属<select id="svPositionKind">'+options+'</select></label>'
+    +'<label class="sv-full" id="svPositionAmountField">金额（元）<input id="svPositionAmount" inputmode="decimal" value="'+(value.amountCents===null?'':value.amountCents/100)+'"></label>'
+    +'<label class="sv-full" id="svPositionAccountField" hidden>对应存款账户<select id="svPositionAccount">'+svOptions(svAccounts(),value.accountId||'')+'</select></label>'
+    +'<p class="sv-hint sv-full">关联存款账户后，旧资产金额不再额外累加。资产估值和负债余额在这里更新。</p>';
+  const finish=svDialog(legacy?'核对旧资产':'管理资产与负债',body,'svPositionForm');
+  const updateFields=()=>{
+    const mode=$('#svPositionKind').value;
+    $('#svPositionAmountField').hidden=!['asset','liability'].includes(mode);
+    $('#svPositionAccountField').hidden=mode!=='linked';
+    $('#svPositionAmount').required=['asset','liability'].includes(mode);
+  };
+  $('#svPositionKind').onchange=updateFields;updateFields();
+  $('#svPositionForm').onsubmit=event=>{
+    event.preventDefault();
+    if(amountPrivacy)return;
+    const latest=svPositions().find(x=>x.id===id);
+    if(stableNote(latest)!==snapshot){$('#svDialogError').textContent='记录已更新，请关闭后重试。';return;}
+    if(legacy&&!svLegacyItems().some(x=>x.legacyRef===legacyRef)){$('#svDialogError').textContent='旧资产已核对，请关闭后重试。';return;}
+    const kind=$('#svPositionKind').value,name=$('#svPositionName').value.trim();
+    const amountCents=['asset','liability'].includes(kind)?svCents($('#svPositionAmount').value,true):0;
+    if(!name||amountCents===null){$('#svDialogError').textContent='请输入名称和不小于零、最多两位小数的金额。';return;}
+    const accountId=kind==='linked'?$('#svPositionAccount').value:undefined;
+    if(kind==='linked'&&!svAccounts().some(x=>x.id===accountId)){$('#svDialogError').textContent='请先添加对应的存款账户，再关联。';return;}
+    const record={...current,id:current?.id||uid(),kind,name,amountCents,accountId,legacyRef:current?.legacyRef||legacyRef||undefined,updatedAt:timeEditTimestamp(current)};
+    const error=svPut('savingsPositions',record);
+    if(error){$('#svDialogError').textContent=error;return;}
+    finish();toast('资产记录已更新');
+  };
+}
+function svDeletePosition(id){
+  if(!requireVisibleAmounts('删除资产记录'))return;
+  const current=svPositions().find(x=>x.id===id);if(!current)return;
+  const snapshot=stableNote(current);
+  const finish=svDialog('移除资产记录','<p class="sv-hint sv-full">将移除“'+esc(current.name)+'”这条汇总记录。存款账户与流水保留。</p>','svDeleteConfirm');
+  $('#svDeleteConfirm button[type="submit"]').textContent='确认移除';
+  $('#svDeleteConfirm').onsubmit=event=>{
+    event.preventDefault();if(amountPrivacy)return;
+    const latest=svPositions().find(x=>x.id===id);
+    if(stableNote(latest)!==snapshot){$('#svDialogError').textContent='记录已更新，请关闭后重试。';return;}
+    const updatedAt=timeEditTimestamp(latest);
+    const error=svPut('savingsPositions',{...latest,updatedAt,deletedAt:updatedAt});
+    if(error){$('#svDialogError').textContent=error;return;}
+    finish();toast('资产记录已移除');
+  };
+}
+function svRenderWealth(){
+  const wealth=svWealth(),positions=svPositions(),pending=svLegacyItems();
+  const recorded=svAccounts().length||positions.some(x=>['asset','liability'].includes(x.kind));
+  $('#svWealthHint').textContent=pending.length?'有 '+pending.length+' 条旧资产或负债待核对，当前仅汇总已确认记录。':'按已记录的存款余额、其他资产和负债汇总。';
+  $('#svWealth').innerHTML=[['总资产',wealth.total],['总负债',wealth.debt],['净资产',wealth.net]]
+    .map(([label,value])=>'<div class="sv-stat"><span>'+label+'</span><strong>'+(!recorded?'尚未记录':svMoney(value))+'</strong></div>').join('');
+  for(const [kind,id] of [['asset','svOtherAssets'],['liability','svDebts'],['linked','svLinkedAssets']]){
+    const rows=positions.filter(x=>kind==='linked'?['linked','ignored'].includes(x.kind):x.kind===kind);
+    $('#'+id).innerHTML=rows.map(record=>{
+      const label=record.kind==='linked'?'已关联 '+(svAccounts().find(x=>x.id===record.accountId)?.name||'账户待核对'):record.kind==='ignored'?'暂不计入':svMoney(record.amountCents);
+      return '<article class="sv-account-row"><div class="sv-account-main"><b>'+esc(maskMoneyText(record.name))+'</b><span>'+esc(label)+'</span></div><div class="sv-actions"><button class="sv-button" type="button" data-position-edit="'+esc(record.id)+'">编辑</button><button class="sv-button" type="button" data-position-delete="'+esc(record.id)+'">移除</button></div></article>';
+    }).join('')||'<p class="sv-empty">暂无记录</p>';
+  }
+  $('#svLinkedDetails').hidden=!positions.some(x=>['linked','ignored'].includes(x.kind));
+  $('#svLegacyAssets').innerHTML=pending.length?'<h4>旧资产待核对</h4><p class="sv-hint">以下 '+pending.length+' 条旧记录尚未计入汇总。请确认它属于其他资产、负债，还是已记录的存款账户。</p>'+pending.map(item=>'<article class="sv-account-row"><div class="sv-account-main"><b>'+esc(maskMoneyText(item.name))+'</b><span>'+ (item.amountCents===null?'金额待核对':svMoney(item.amountCents))+'</span></div><button type="button" class="sv-button" data-position-review="'+esc(item.legacyRef)+'">核对归属</button></article>').join(''):'';
+  $('#svAllocation').innerHTML=amountPrivacy?'<div class="amount-chart-cover">资产配置已隐藏</div>':wealth.total>0?
+    [['存款',wealth.deposit],['其他资产',wealth.other]].filter(([,value])=>value>0).map(([label,value])=>{
+      const percent=value/wealth.total*100;
+      return '<div class="sv-allocation-row"><div class="sv-heading"><span>'+label+'</span><span>'+svMoney(value)+' · '+percent.toFixed(1)+'%</span></div><progress max="100" value="'+percent+'" aria-label="'+label+'占总资产比例"></progress></div>';
+    }).join(''):'<p class="sv-empty">记录资产后显示配置比例</p>';
+  $$('#svWealthCard [data-position-edit]').forEach(button=>button.onclick=()=>svPositionDialog(button.dataset.positionEdit));
+  $$('#svWealthCard [data-position-delete]').forEach(button=>button.onclick=()=>svDeletePosition(button.dataset.positionDelete));
+  $$('#svWealthCard [data-position-review]').forEach(button=>button.onclick=()=>svPositionDialog(null,'asset',button.dataset.positionReview));
+  $$('#svWealthCard button').forEach(button=>button.disabled=amountPrivacy);
+}
+function svGoals(){
+  if(S.savingsGoals)return S.savingsGoals;
+  const old=S.fundMgr?.goals;
+  return {monthNetTargetCents:svCents(String(old?.monthGoal??0),true)||0,yearNetTargetCents:0,yearBalanceTargetCents:svCents(String(old?.yearGoal??0),true)||0};
+}
+function svRenderGoals(){
+  const goals=svGoals(),today=todayStr(),year=today.slice(0,4);
+  const month=svSummary(today.slice(0,7)+'-01',today),annual=svSummary(year+'-01-01',today);
+  $('#svGoals').innerHTML=[
+    ['本月净存入',month.net,goals.monthNetTargetCents,month.recorded],
+    ['本年净存入',annual.net,goals.yearNetTargetCents,annual.recorded],
+    ['年末存款余额',annual.closing,goals.yearBalanceTargetCents,annual.recorded]
+  ].map(([label,value,target,recorded])=>{
+    const percent=target>0&&recorded?Math.max(0,Math.min(100,value/target*100)):0;
+    return '<div class="sv-goal-row"><div class="sv-heading"><b>'+label+'</b><span>'+(target>0?svMoney(target):'未设置目标')+'</span></div><p>'+(recorded?'当前 '+svMoney(value):'尚未记录')+'</p>'+(amountPrivacy||!target?'':'<progress max="100" value="'+percent+'" aria-label="'+label+'目标进度"></progress>')+'</div>';
+  }).join('');
+  const old=S.fundMgr?.goals;
+  $('#svLegacyGoals').hidden=!old||![old.monthSaved,old.yearSaved].some(value=>Number(value)!==0);
+  $('#svLegacyGoalsText').textContent=old?'旧记录的本月已存 '+money(Number(old.monthSaved)||0)+'，累计已存 '+money(Number(old.yearSaved)||0)+'。当前完成额按存款流水重新计算。':'';
+  $('#svEditGoals').disabled=amountPrivacy;
+}
+function svGoalsDialog(){
+  if(!requireVisibleAmounts('设置存钱目标'))return;
+  const current=S.savingsGoals,snapshot=stableNote(current),goals=svGoals();
+  const fields=[['monthNetTargetCents','每月净存入目标'],['yearNetTargetCents','每年净存入目标'],['yearBalanceTargetCents','年末存款余额目标']];
+  const body=fields.map(([key,label])=>'<label class="sv-full">'+label+'（元）<input id="'+key+'" inputmode="decimal" value="'+(goals[key]||0)/100+'" required></label>').join('')+'<p class="sv-hint sv-full">设为0表示暂不设置。月／年净存入按对应自然期间统计，年末余额目标按当前存款余额衡量。</p>';
+  const finish=svDialog('设置存钱目标',body,'svGoalsForm');
+  $('#svGoalsForm').onsubmit=event=>{
+    event.preventDefault();if(amountPrivacy)return;
+    if(stableNote(S.savingsGoals)!==snapshot){$('#svDialogError').textContent='目标已经更新，请关闭后重试。';return;}
+    const next={updatedAt:timeEditTimestamp(current)};
+    for(const [key] of fields){
+      next[key]=svCents($('#'+key).value,true);
+      if(next[key]===null){$('#svDialogError').textContent='请输入不小于零、最多两位小数的目标金额。';return;}
+    }
+    S.savingsGoals=next;persist();renderSavings();finish();toast('存钱目标已保存');
+  };
+}
+$('#svAddAsset').onclick=()=>svPositionDialog(null,'asset');
+$('#svAddDebt').onclick=()=>svPositionDialog(null,'liability');
+$('#svEditGoals').onclick=svGoalsDialog;
+
 /* ============ 资金管理（v3.20.23 demo） ============ */
 const FM_DEFAULT_DIRS=[
   {id:'d_free',name:'自由支配',color:'#5a7a8a'},
@@ -3886,19 +4032,15 @@ const FM_DEFAULT_RULES=[
   {id:'r_fund',target:'d_fund',method:'fixed',value:1500,cond:'gt',threshold:7500},
   {id:'r_fsave',target:'d_fsave',method:'remainder',value:0,cond:'always'}
 ];
-const FM_DEFAULT_GOALS={monthGoal:3000,yearGoal:36000,monthSaved:0,yearSaved:0};
-const FM_DEFAULT_ASSETS=[
-  {id:'a_zfb',name:'支付宝小荷包',amount:5000},
-  {id:'a_wx',name:'微信余额',amount:2000},
-  {id:'a_fund',name:'基金账户',amount:12000}
-];
+const FM_DEFAULT_GOALS={monthGoal:0,yearGoal:0,monthSaved:0,yearSaved:0};
+const FM_DEFAULT_ASSETS=[];
 const FM_DEFAULT_LIABS=[];
 function ensureFundMgr(){
   if(!S.fundMgr)S.fundMgr={income:0,directions:JSON.parse(JSON.stringify(FM_DEFAULT_DIRS)),rules:JSON.parse(JSON.stringify(FM_DEFAULT_RULES)),goals:JSON.parse(JSON.stringify(FM_DEFAULT_GOALS)),assets:JSON.parse(JSON.stringify(FM_DEFAULT_ASSETS)),liabilities:JSON.parse(JSON.stringify(FM_DEFAULT_LIABS))};
   if(!S.fundMgr.directions||!S.fundMgr.directions.length)S.fundMgr.directions=JSON.parse(JSON.stringify(FM_DEFAULT_DIRS));
   if(!S.fundMgr.rules)S.fundMgr.rules=JSON.parse(JSON.stringify(FM_DEFAULT_RULES));
   if(!S.fundMgr.goals)S.fundMgr.goals=JSON.parse(JSON.stringify(FM_DEFAULT_GOALS));
-  if(!S.fundMgr.assets||!S.fundMgr.assets.length)S.fundMgr.assets=JSON.parse(JSON.stringify(FM_DEFAULT_ASSETS));
+  if(!Array.isArray(S.fundMgr.assets))S.fundMgr.assets=JSON.parse(JSON.stringify(FM_DEFAULT_ASSETS));
   if(!S.fundMgr.liabilities)S.fundMgr.liabilities=JSON.parse(JSON.stringify(FM_DEFAULT_LIABS));
   return S.fundMgr;
 }
@@ -4009,9 +4151,6 @@ function setFundAmountField(input,value){
   }
   if(document.activeElement!==input)input.value=value;
 }
-function fundAmountAttributes(value){
-  return amountPrivacy?'disabled placeholder="'+MONEY_MASK+'"':'value="'+esc(value)+'"';
-}
 function renderFundManager(){
   const fm=ensureFundMgr();
   setFundAmountField($('#fmIncome'),fm.income||'');
@@ -4023,63 +4162,11 @@ function renderFundManager(){
   $('#fmResultGrid').innerHTML=res.html;
   fmRenderRules();
   fmRenderDirs();
-  renderGoals();
 }
 $('#fmIncome').oninput=()=>{if(amountPrivacy)return;const fm=ensureFundMgr();fm.income=parseFloat($('#fmIncome').value)||0;persist();renderFundManager();};
 $('#fmCalc').onclick=()=>{if(!requireVisibleAmounts('计算分配'))return;const fm=ensureFundMgr();fm.income=parseFloat($('#fmIncome').value)||0;persist();renderFundManager();toast('已按当前收入计算分配');};
 $('#fmAddRule').onclick=()=>{if(!requireVisibleAmounts('编辑分配规则'))return;const fm=ensureFundMgr();const def=fm.directions[0]?fm.directions[0].id:'d_free';fm.rules.push({id:'r_'+uid().slice(0,6),target:def,method:'fixed',value:0,cond:'always',enabled:true});persist();renderFundManager();};
 $('#fmAddDir').onclick=()=>{const fm=ensureFundMgr();fm.directions.push({id:'d_'+uid().slice(0,6),name:'新方向',color:CAT_PALETTE[fm.directions.length%CAT_PALETTE.length]});persist();renderFundManager();};
-/* ===== v3.20.24: 存钱目标 + 总资产 ===== */
-function renderGoals(){
-  const fm=ensureFundMgr();const g=fm.goals;
-  const set=(id,val)=>setFundAmountField($(id),val??'');
-  set('#fmMonthGoal',g.monthGoal);set('#fmMonthSaved',g.monthSaved);
-  set('#fmYearGoal',g.yearGoal);set('#fmYearSaved',g.yearSaved);
-  const mp=g.monthGoal>0?Math.min(100,g.monthSaved/g.monthGoal*100):0;
-  $('#fmMonthBar').style.width=amountPrivacy?'0':mp+'%';
-  $('#fmMonthTxt').textContent='本月已存 '+money(g.monthSaved)+' / 目标 '+money(g.monthGoal)+(amountPrivacy?'':' · '+mp.toFixed(0)+'%'+(g.monthGoal>0&&g.monthSaved>=g.monthGoal?' ✓ 已达成':''));
-  const yp=g.yearGoal>0?Math.min(100,g.yearSaved/g.yearGoal*100):0;
-  $('#fmYearBar').style.width=amountPrivacy?'0':yp+'%';
-  $('#fmYearTxt').textContent='累计已存 '+money(g.yearSaved)+' / 目标 '+money(g.yearGoal)+(amountPrivacy?'':' · '+yp.toFixed(0)+'%'+(g.yearGoal>0&&g.yearSaved>=g.yearGoal?' ✓ 已达成':''));
-}
-function refreshAssetTotals(){
-  const fm=ensureFundMgr();
-  const ta=fm.assets.reduce((s,a)=>s+(parseFloat(a.amount)||0),0);
-  const tl=fm.liabilities.reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
-  $('#fmTotalAsset').textContent=money(ta);
-  $('#fmTotalLiab').textContent=money(tl);
-  $('#fmNetAsset').textContent=money(ta-tl);
-  if(amountPrivacy){$('#fmAssetBars').innerHTML='<div class="amount-chart-cover">资产配置已隐藏</div>';return;}
-  const bars=fm.assets.filter(a=>(parseFloat(a.amount)||0)>0);
-  if(!bars.length){$('#fmAssetBars').innerHTML='<div class="fm-empty">暂无资产金额</div>';return;}
-  const maxA=Math.max.apply(null,bars.map(a=>parseFloat(a.amount)||0));
-  const palette=['#5a7a8a','#b9a88c','#7a9a5a','#9a7a9a','#7a82c4','#c98a5a','#b0854e'];
-  $('#fmAssetBars').innerHTML=bars.map((a,i)=>{const v=parseFloat(a.amount)||0;const pct=maxA>0?v/maxA*100:0;const pctAll=ta>0?v/ta*100:0;return `<div class="fm-comp"><div class="nm"><span>${esc(a.name)}</span><span class="amt">${money(v)} · ${pctAll.toFixed(0)}%</span></div><div class="track"><i style="width:${pct}%;background:${palette[i%palette.length]}"></i></div></div>`;}).join('');
-}
-function renderAssets(){
-  const fm=ensureFundMgr();
-  $('#fmAssets').innerHTML=fm.assets.map((a,i)=>`<div class="fm-item" data-i="${i}"><input class="fm-item-name" value="${esc(a.name)}" placeholder="账户名" maxlength="12"><span class="fm-unit">¥</span><input class="fm-item-amt" type="number" inputmode="decimal" ${fundAmountAttributes(a.amount||0)}><button class="fm-del" data-del="${i}">×</button></div>`).join('')||'<div class="fm-empty">暂无资产，点「＋ 资产」添加</div>';
-  $$('#fmAssets .fm-item').forEach(el=>{
-    const i=+el.dataset.i;
-    el.querySelector('.fm-item-name').onchange=e=>{fm.assets[i].name=e.target.value.trim()||'账户';persist();renderAssets();};
-    el.querySelector('.fm-item-amt').oninput=e=>{if(amountPrivacy)return;fm.assets[i].amount=parseFloat(e.target.value)||0;persist();refreshAssetTotals();};
-    el.querySelector('.fm-del').onclick=()=>{fm.assets.splice(i,1);persist();renderAssets();};
-  });
-  $('#fmLiabs').innerHTML=fm.liabilities.map((l,i)=>`<div class="fm-item" data-i="${i}"><input class="fm-item-name" value="${esc(l.name)}" placeholder="负债名" maxlength="12"><span class="fm-unit">¥</span><input class="fm-item-amt" type="number" inputmode="decimal" ${fundAmountAttributes(l.amount||0)}><button class="fm-del" data-del="${i}">×</button></div>`).join('')||'<div class="fm-empty">暂无负债，点「＋ 负债」添加</div>';
-  $$('#fmLiabs .fm-item').forEach(el=>{
-    const i=+el.dataset.i;
-    el.querySelector('.fm-item-name').onchange=e=>{fm.liabilities[i].name=e.target.value.trim()||'负债';persist();renderAssets();};
-    el.querySelector('.fm-item-amt').oninput=e=>{if(amountPrivacy)return;fm.liabilities[i].amount=parseFloat(e.target.value)||0;persist();refreshAssetTotals();};
-    el.querySelector('.fm-del').onclick=()=>{fm.liabilities.splice(i,1);persist();renderAssets();};
-  });
-  refreshAssetTotals();
-}
-$('#fmMonthGoal').oninput=()=>{if(amountPrivacy)return;const fm=ensureFundMgr();fm.goals.monthGoal=parseFloat($('#fmMonthGoal').value)||0;persist();renderGoals();};
-$('#fmMonthSaved').oninput=()=>{if(amountPrivacy)return;const fm=ensureFundMgr();fm.goals.monthSaved=parseFloat($('#fmMonthSaved').value)||0;persist();renderGoals();};
-$('#fmYearGoal').oninput=()=>{if(amountPrivacy)return;const fm=ensureFundMgr();fm.goals.yearGoal=parseFloat($('#fmYearGoal').value)||0;persist();renderGoals();};
-$('#fmYearSaved').oninput=()=>{if(amountPrivacy)return;const fm=ensureFundMgr();fm.goals.yearSaved=parseFloat($('#fmYearSaved').value)||0;persist();renderGoals();};
-$('#fmAddAsset').onclick=()=>{const fm=ensureFundMgr();fm.assets.push({id:'a_'+uid().slice(0,6),name:'新账户',amount:0});persist();renderAssets();};
-$('#fmAddLiab').onclick=()=>{const fm=ensureFundMgr();fm.liabilities.push({id:'l_'+uid().slice(0,6),name:'新负债',amount:0});persist();renderAssets();};
 function hexA(hex,a){
   if(!hex)return'rgba(0,0,0,'+a+')';
   hex=(''+hex).replace('#','');
@@ -6119,7 +6206,9 @@ function mergeData(d){
   };
   const timeChips=[countTimeRecords('timeEntries','实际用时'),countTimeRecords('dailyTimeReviews','每日复盘')].filter(Boolean);
   let savingsMerged=false;
-  for(const field of ['savingsAccounts','savingsEntries']){
+  const goals=timeNewest(S.savingsGoals,d.savingsGoals);
+  if(goals&&stableNote(goals)!==stableNote(S.savingsGoals)){S.savingsGoals=goals;savingsMerged=true;}
+  for(const field of ['savingsAccounts','savingsEntries','savingsPositions']){
     if(!Array.isArray(d[field]))continue;
     const records=svMergeRecords(S[field],d[field]);
     if(stableNote(records)!==stableNote(svRecords(field)))savingsMerged=true;
@@ -6712,6 +6801,8 @@ function runProdNoteMergeChecks(){
    —— 根治原 last-write-wins 整覆盖导致跨设备丢数据的问题（如某笔账本地未上云被云端旧版本覆盖） */
 function mergeState(remote){
   let changed=mergeLedgerSettings(remote);
+  const goals=timeNewest(S.savingsGoals,remote.savingsGoals);
+  if(goals&&stableNote(goals)!==stableNote(S.savingsGoals)){S.savingsGoals=goals;changed=true;}
   const unionArr=(loc,rem)=>{
     const map=new Map();
     (loc||[]).forEach(x=>{if(x&&x.id)map.set(x.id,x)});
@@ -6784,7 +6875,7 @@ function mergeState(remote){
     S.habits=[...map.values()];
   }());
   S.ledger=unionArr(S.ledger,remote.ledger);
-  for(const field of ['savingsAccounts','savingsEntries']){
+  for(const field of ['savingsAccounts','savingsEntries','savingsPositions']){
     if(!Array.isArray(remote[field]))continue;
     const records=svMergeRecords(S[field],remote[field]);
     if(stableNote(records)!==stableNote(svRecords(field)))changed=true;
@@ -7785,8 +7876,6 @@ const MODULES=[
   {id:'expenseAnalysis',name:'年／月支出分析',page:'money'},
   {id:'catExpense',name:'分类支出',page:'money'},
   {id:'flowList',name:'流水记录',page:'money'},
-  {id:'fundManager',name:'资金管理',page:'money'},
-  {id:'assets',name:'总资产',page:'money'},
   {id:'savings',name:'存款记录',page:'money'},
   {id:'mood',name:'今日心情',page:'heat'},
   {id:'heatmap',name:'年度活跃热力图',page:'heat'},
@@ -7886,7 +7975,7 @@ const _sr=$('#storageRestoreBtn');if(_sr)_sr.onclick=restoreLocalSnapshot;
 function syncStickyOffsets(){const hdr=document.querySelector('header.topbar');if(hdr)document.documentElement.style.setProperty('--topbar-h',Math.ceil(hdr.getBoundingClientRect().height)+'px');const sw=$('#moneyViewSwitch');if(sw&&sw.getBoundingClientRect().height)document.documentElement.style.setProperty('--money-switch-h',Math.ceil(sw.getBoundingClientRect().height)+'px')}
 syncStickyOffsets();window.addEventListener('resize',syncStickyOffsets);if(window.ResizeObserver){const _stickyRO=new ResizeObserver(syncStickyOffsets);const _stickyHdr=document.querySelector('header.topbar');if(_stickyHdr)_stickyRO.observe(_stickyHdr)}
 const MONEY_VIEW_KEY='wb_money_view_v1';
-function setMoneyView(v){const page=$('#page-money');if(!page)return;const allowed=['entry','analysis','plan','savings'];if(!allowed.includes(v))v='entry';page.dataset.moneyView=v;try{localStorage.setItem(MONEY_VIEW_KEY,v)}catch(e){}$$('#moneyViewSwitch button').forEach(b=>{b.classList.toggle('on',b.dataset.v===v);b.setAttribute('aria-pressed',String(b.dataset.v===v))});if(v==='savings')renderSavings();if(v==='analysis')renderExpenseAnalysis();if($('#page-money').classList.contains('active'))window.scrollTo({top:0,behavior:'auto'})}
+function setMoneyView(v){const page=$('#page-money');if(!page)return;if(v==='plan')v='savings';const allowed=['entry','analysis','savings'];if(!allowed.includes(v))v='entry';page.dataset.moneyView=v;try{localStorage.setItem(MONEY_VIEW_KEY,v)}catch(e){}$$('#moneyViewSwitch button').forEach(b=>{b.classList.toggle('on',b.dataset.v===v);b.setAttribute('aria-pressed',String(b.dataset.v===v))});if(v==='savings')renderSavings();if(v==='analysis')renderExpenseAnalysis();if($('#page-money').classList.contains('active'))window.scrollTo({top:0,behavior:'auto'})}
 $$('#moneyViewSwitch button').forEach(b=>b.onclick=()=>setMoneyView(b.dataset.v));
 try{setMoneyView(localStorage.getItem(MONEY_VIEW_KEY)||'entry')}catch(e){setMoneyView('entry')}
 const _todayJump=(id,fn)=>{const el=$(id);if(el)el.onclick=fn};

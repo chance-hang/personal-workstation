@@ -107,22 +107,23 @@ async function screenshot(p,name){
 
   await setTab(p,'money');
   await p.evaluate(()=>setMoneyView('analysis'));
-  const financialReadouts=['#todayStat','#monthStat','#budgetTxt','#budgetHint','#flowSum','#flowList','#flowPie','#flowPieBudget','#catChart','#fmResultGrid','#fmMonthTxt','#fmYearTxt','#fmTotalAsset','#fmTotalLiab','#fmNetAsset','#fmAssetBars'];
+  const financialReadouts=['#todayStat','#monthStat','#budgetTxt','#budgetHint','#flowSum','#flowList','#flowPie','#flowPieBudget','#catChart','#fmResultGrid','#svGoals','#svWealth','#svOtherAssets','#svDebts','#svAllocation','#svLegacyAssets','#svLegacyGoalsText'];
   for(const selector of financialReadouts)hasNoAmounts(await p.locator(selector).textContent());
   assert.match(await show(p,'#flowList'),/测试餐费 ••••/);
   assert.match(await show(p,'#monthStat'),privateText);
   assert.match(await show(p,'#flowPie'),/金额图表已隐藏/);
   assert.match(await show(p,'#catChart'),/支出图表已隐藏/);
-  assert.equal(await p.locator('#flowPie svg,#flowPieBudget svg,#fmAssetBars svg').count(),0);
+  assert.equal(await p.locator('#flowPie svg,#flowPieBudget svg,#svAllocation svg').count(),0);
   assert.equal(await p.locator('#budgetBar').evaluate(e=>e.style.width),'0px');
   await screenshot(p,'amount-privacy-ledger-desktop');
   await p.evaluate(()=>setMoneyView('plan'));
-  for(const selector of ['#fmIncome','#fmMonthGoal','#fmMonthSaved','#fmYearGoal','#fmYearSaved','#fmAssets .fm-item-amt','#fmLiabs .fm-item-amt']){
+  await p.locator('#svAllocationPlan summary').click();
+  for(const selector of ['#fmIncome','#svEditGoals','#svAddAsset','#svAddDebt']){
     assert(await p.locator(selector).isDisabled(),selector);
-    assert.equal(await p.locator(selector).inputValue(),'',selector);
+    if(selector==='#fmIncome')assert.equal(await p.locator(selector).inputValue(),'',selector);
   }
   assert.match(await show(p,'#fmRules'),/隐藏分配规则/);
-  assert.match(await show(p,'#fmAssetBars'),/资产配置已隐藏/);
+  assert.match(await show(p,'#svAllocation'),/资产配置已隐藏/);
   pass('ledger, budget, income, rules, savings and assets mask values and remove proportional charts');
 
   await setTab(p,'history');

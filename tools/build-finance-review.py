@@ -51,16 +51,23 @@ for date,kind,account,amount,to in [
  record={'id':'virtual-sv-'+str(len(state['savingsEntries'])),'date':date,'kind':kind,'accountId':account,'amountCents':amount,'note':'纯虚拟验收','updatedAt':'2026-11-18T00:00:00Z'}
  if to:record['toAccountId']=to
  state['savingsEntries'].append(record)
+state['savingsPositions']=[
+ {'id':'virtual-fund','kind':'asset','name':'虚拟基金估值','amountCents':500000,'updatedAt':'2026-11-19T00:00:00Z'},
+ {'id':'virtual-debt','kind':'liability','name':'虚拟信用卡待还','amountCents':200000,'updatedAt':'2026-11-19T00:00:00Z'}
+]
+state['savingsGoals']={'monthNetTargetCents':100000,'yearNetTargetCents':500000,'yearBalanceTargetCents':1500000,'updatedAt':'2026-11-19T00:00:00Z'}
+# Legacy duplicate is deliberately left for manual association, so it never doubles assets.
+state['fundMgr']={'income':8000,'assets':[{'id':'old-bank','name':'虚拟工资卡（旧资产）','amount':11700}],'liabilities':[],'goals':{'monthGoal':1000,'yearGoal':15000,'monthSaved':999,'yearSaved':9999}}
 fixture=out/'虚拟数据.json'
 fixture.write_text(json.dumps(state,ensure_ascii=False,indent=2),encoding='utf-8')
 preview=out/'index.html'
-subprocess.run([sys.executable,str(root/'tools/build-review-preview.py'),'--output',str(preview),'--label','存款与支出分析 · 虚拟数据','--namespace','review_finance_audit_20261119_'],check=True)
+subprocess.run([sys.executable,str(root/'tools/build-review-preview.py'),'--output',str(preview),'--label','存款与支出分析 · 虚拟数据','--namespace','review_finance_unified_20261119_'],check=True)
 html=preview.read_text('utf-8')
 payload=json.dumps(state,ensure_ascii=False,separators=(',',':')).replace('<','\\u003c')
 seed="""const reviewVirtualFixture=PAYLOAD;
 function loadReviewVirtualFixture(){
   localStorage.setItem(KEY,JSON.stringify(reviewVirtualFixture));
-  localStorage.setItem('virtual_fixture_loaded','v1');
+  localStorage.setItem('virtual_fixture_loaded','v2');
 }
 if(!localStorage.getItem('virtual_fixture_loaded'))loadReviewVirtualFixture();
 """
