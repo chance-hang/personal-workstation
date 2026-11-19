@@ -107,7 +107,7 @@ async function screenshot(p,name){
 
   await setTab(p,'money');
   await p.evaluate(()=>setMoneyView('analysis'));
-  const financialReadouts=['#todayStat','#monthStat','#budgetTxt','#budgetHint','#flowSum','#flowList','#flowPie','#flowPieBudget','#catChart','#fmResultGrid','#svGoals','#svWealth','#svOtherAssets','#svDebts','#svAllocation','#svLegacyAssets','#svLegacyGoalsText'];
+  const financialReadouts=['#todayStat','#monthStat','#budgetTxt','#budgetHint','#flowSum','#flowList','#flowPie','#flowPieBudget','#catChart','#fmResultGrid','#fmTransferSummary','#fmHistoryList','#svGoals','#svWealth','#svOtherAssets','#svDebts','#svAllocation','#svLegacyAssets','#svLegacyGoalsText'];
   for(const selector of financialReadouts)hasNoAmounts(await p.locator(selector).textContent());
   assert.match(await show(p,'#flowList'),/测试餐费 ••••/);
   assert.match(await show(p,'#monthStat'),privateText);
@@ -117,7 +117,8 @@ async function screenshot(p,name){
   assert.equal(await p.locator('#budgetBar').evaluate(e=>e.style.width),'0px');
   await screenshot(p,'amount-privacy-ledger-desktop');
   await p.evaluate(()=>setMoneyView('plan'));
-  await p.locator('#svAllocationPlan summary').click();
+  await p.locator('#svAllocationPlan > summary').click();
+  await p.locator('#fmRulePanel > summary').click();
   for(const selector of ['#fmIncome','#svEditGoals','#svAddAsset','#svAddDebt']){
     assert(await p.locator(selector).isDisabled(),selector);
     if(selector==='#fmIncome')assert.equal(await p.locator(selector).inputValue(),'',selector);

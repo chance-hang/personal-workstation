@@ -260,27 +260,8 @@ main{flex:1;padding:16px 16px calc(var(--tab-h) + 24px)}
 .flow-item .f-cat{font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .flow-item .f-tag{display:inline-block;padding:1px 9px;border-radius:99px;font-size:12.5px;font-weight:600;line-height:1.6}
 .flow-item .f-note{font-size:11.5px;color:var(--text-3)}
-/* v3.20.23: 资金管理模块（demo） */
-.fm-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px}
-.fm-cell{background:var(--card-soft);border:1px solid var(--line-soft);border-radius:var(--r-sm);padding:10px 8px;text-align:center}
-.fm-cell .fm-amt{font-size:16px;font-weight:700}
-.fm-cell .fm-lab{font-size:11px;color:var(--text-3);margin-top:2px}
-.fm-dir{display:inline-flex;align-items:center;gap:5px;background:var(--card-soft);border:1px solid var(--line-soft);border-radius:99px;padding:3px 8px 3px 10px}
-.fm-dir .d{width:10px;height:10px;border-radius:99px;flex:none}
-.fm-dir .fm-dir-name{font-size:12.5px;font-weight:600}
-.fm-dir .x{cursor:pointer;color:var(--text-3);font-size:14px;line-height:1}
-.fm-rule{background:var(--card-soft);border:1px solid var(--line-soft);border-radius:var(--r-sm);padding:8px 10px;margin-top:8px}
-.fm-rule-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.fm-rule-line+.fm-rule-line{margin-top:6px}
-.fm-sel,.fm-num{background:var(--card);border:1px solid var(--line);border-radius:var(--r-xs);padding:5px 7px;font-size:12.5px;color:var(--text-2);max-width:120px}
-.fm-num{width:72px}
-.fm-unit{font-size:12px;color:var(--text-3)}
-.fm-sw{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:var(--text-3)}
-.fm-del{margin-left:auto;border:none;background:transparent;color:var(--bad);font-size:16px;cursor:pointer;line-height:1}
 .mini-btn{border:1px solid var(--line);background:var(--card);border-radius:var(--r-xs);padding:4px 10px;font-size:12px;color:var(--text-2);cursor:pointer}
 .mini-btn:hover{color:var(--text);border-color:var(--text-2)}
-/* v3.20.24: 存钱目标进度条 + 总资产条目 */
-.fm-empty{color:var(--text-3);font-size:12.5px;margin-top:8px}
 .flow-item .f-amt{font-weight:700;font-size:15px;flex:none}
 .flow-item .f-date{font-size:11px;color:var(--text-3);margin-top:2px}
 .budget-bar-wrap{position:relative;margin:8px 0;padding-bottom:13px}
@@ -1582,5 +1563,24 @@ summary::-webkit-details-marker{color:var(--text)}
 
 #svAllocationPlan :is(button,input,select){min-height:var(--ui-hit-size)}
 #svAllocationPlan button{white-space:nowrap}
-#svAllocationPlan .fm-rule-line{flex-wrap:wrap}
-#svAllocationPlan .fm-dir .x{display:inline-flex;align-items:center;justify-content:center;min-width:var(--ui-hit-size);min-height:var(--ui-hit-size)}
+/* finesse · component: payroll planning · register=product · tokens: inherited */
+.fm-workflow>summary,.fm-section>summary,.fm-history-item>summary,#fmBreakdown>summary{min-height:44px;padding-block:10px;line-height:24px}
+.fm-section{margin-top:10px}
+.fm-section + .fm-section{border-top:1px solid var(--line);padding-top:4px}
+.fm-workflow .sv-hint{overflow-wrap:anywhere}
+.fm-result,.fm-summary{margin:10px 0}
+.fm-result:empty,.fm-summary:empty{display:none}
+.fm-value-row,.fm-list-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line-soft)}
+.fm-value-row>span,.fm-list-row>div{min-width:0;overflow-wrap:anywhere}
+.fm-value-row :is(b,strong){flex:none;font-variant-numeric:tabular-nums}
+.fm-value-row small,.fm-list-row small{display:block;color:var(--text-2);font-size:var(--ui-font-caption)}
+.fm-list-row button{flex:none}
+.fm-summary{padding:4px 12px;background:var(--card-soft);border-radius:var(--r-sm)}
+.fm-summary .fm-total{border-bottom:0;font-weight:700}
+.fm-total strong{font-size:1.15rem}
+.fm-workflow #fmCalc{width:100%}
+.fm-actions{margin-top:8px}
+.fm-check{display:flex!important;flex-direction:row!important;align-items:center;min-height:44px;gap:8px}
+.fm-check input[type=checkbox]{width:18px;min-height:0;height:18px;margin:0;accent-color:var(--pri)}
+.fm-danger{color:var(--bad)}
+@media(max-width:375px){#fmPayForm{grid-template-columns:minmax(0,1fr)}}

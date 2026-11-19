@@ -2419,7 +2419,7 @@ function setAmountPrivacy(enabled){
   if($('#histPreviewBack'))closeModal();
   if(enabled){
     ledgerAmountDraft=$('#amtIn').value;
-    if($('#modalBox :is(#bIn,#elAmt,#qnText,#ipText,#mpText,#expDl,#reportText,#hisExpText,#lnExpText,#svAccountForm,#svEditForm,#svDeleteConfirm,#svPositionForm,#svGoalsForm)'))closeModal();
+    if($('#modalBox :is(#bIn,#elAmt,#qnText,#ipText,#mpText,#expDl,#reportText,#hisExpText,#lnExpText,#svAccountForm,#svEditForm,#svDeleteConfirm,#svPositionForm,#svGoalsForm,#fmEditForm)'))closeModal();
   }
   amountPrivacy=enabled;
   applyAmountControls();
@@ -3601,7 +3601,7 @@ $('#focusBudgetToggle').onclick=()=>{
 /* ============ 账本 ============ */
 let curType='expense',curCat=null,curMonth=new Date();
 function renderMoney(){
-  renderCats();renderFlow();renderMonthStat();renderCatChart();renderTodayStat();renderNoteQuickRow();renderFundManager();renderFocusCard();renderSavings();renderExpenseAnalysis();
+  renderCats();renderFlow();renderMonthStat();renderCatChart();renderTodayStat();renderNoteQuickRow();renderFocusCard();renderSavings();renderExpenseAnalysis();
 }
 /* ============ 存款：独立账户与流水，金额以整数分保存 ============ */
 const SV_LIMIT=1000000000000,SV_PAGE_SIZE=20;
@@ -3645,6 +3645,8 @@ function svValidate(state){
     if(!a||e.date<a.openingDate)return '流水日期不能早于账户起始日期，且账户必须存在。';
     if(e.kind==='transfer'&&(!to||a.id===to.id||e.date<to.openingDate))return '互转需要两个不同账户，日期不能早于任一账户起始日期。';
   }
+  const pocketError=fmValidatePocketHistory(entries,state.savingsPayroll?.openingByPocket);
+  if(pocketError)return pocketError;
   for(const position of svPositions(state)){
     if(!['asset','liability','linked','ignored'].includes(position.kind)||!String(position.name||'').trim()||!Number.isSafeInteger(position.amountCents)||position.amountCents<0||position.amountCents>SV_LIMIT)return '资产或负债记录的名称、类型及金额无效，请核对。';
     if(position.kind==='linked'&&!map.has(position.accountId))return '旧资产关联的存款账户不存在，请重新核对关联。';
@@ -3723,8 +3725,11 @@ function svReadEntry(prefix,current){
   if(amountCents===null)return {error:'请输入大于 0、最多两位小数的金额（最高 100 亿元）。'};
   const accounts=svAccounts();
   if([accountId,toAccountId].filter(Boolean).some(id=>accounts.find(a=>a.id===id)?.archived&&![current?.accountId,current?.toAccountId].includes(id)))return {error:'该账户已停用，请选择其他账户。'};
-  return {record:{...current,id:current?.id||uid(),kind,accountId,toAccountId,amountCents,
-    date:$(edit?'#svEditDate':'#svDate').value,note:$(edit?'#svEditNote':'#svNote').value.trim(),updatedAt:timeEditTimestamp(current)}};
+  const record={...current,id:current?.id||uid(),kind,accountId,toAccountId,amountCents,
+    date:$(edit?'#svEditDate':'#svDate').value,note:$(edit?'#svEditNote':'#svNote').value.trim(),updatedAt:timeEditTimestamp(current)};
+  const pocket=fmPocket();
+  if(!current&&pocket&&svDelta(record,pocket.id)>0)record.payrollTag={pocketId:pocket.id,kind:'funding',repayCents:0};
+  return {record};
 }
 function svDialog(title,body,formId){
   const before=document.activeElement;
@@ -3766,6 +3771,7 @@ function svOpenAccount(id){
 function svEditEntry(id){
   if(!requireVisibleAmounts('编辑存款流水'))return;
   const original=svEntries().find(e=>e.id===id);if(!original)return;
+  if(original.payrollTag){fmPocketEntryDialog(original.payrollTag.kind,original);return;}
   const snapshot=stableNote(original),finish=svDialog('编辑存款流水',svEntryFields(original),'svEditForm');
   $('#svEditKind').onchange=()=>{$('#svEditToField').hidden=$('#svEditKind').value!=='transfer';};
   $('#svEditForm').onsubmit=event=>{
@@ -3836,7 +3842,9 @@ function svRenderFlows(){
   $('#svFlowCount').textContent=entries.length+' 笔';
   $('#svFlows').innerHTML=entries.slice(svPage*SV_PAGE_SIZE,(svPage+1)*SV_PAGE_SIZE).map(e=>{
     const type={deposit:'存入',withdraw:'取出',transfer:'互转'}[e.kind],from=accounts.get(e.accountId)?.name||'账户缺失';
-    return `<article class="sv-flow"><div class="sv-flow-head"><b>${type}</b><strong class="sv-number">${svMoney(e.amountCents)}</strong></div><p>${esc(from)}${e.kind==='transfer'?' → '+esc(accounts.get(e.toAccountId)?.name||'账户缺失'):''}</p><p class="sv-hint">${esc(e.date)}${e.note?' · '+esc(ledgerNoteDisplay(e.note)):''}</p><div class="sv-actions"><button type="button" class="sv-button" data-sv-edit="${esc(e.id)}">编辑</button><button type="button" class="sv-button" data-sv-delete="${esc(e.id)}">删除</button></div></article>`;
+    const tag=e.payrollTag;
+    const pocketNote=tag?.kind==='emergency'?'应急取用 · 待补回':tag?.kind==='funding'?'新增 '+svMoney(e.amountCents-tag.repayCents)+' · 补回 '+svMoney(tag.repayCents):'';
+    return `<article class="sv-flow"><div class="sv-flow-head"><b>${type}</b><strong class="sv-number">${svMoney(e.amountCents)}</strong></div><p>${esc(from)}${e.kind==='transfer'?' → '+esc(accounts.get(e.toAccountId)?.name||'账户缺失'):''}</p><p class="sv-hint">${esc(e.date)}${e.note?' · '+esc(ledgerNoteDisplay(e.note)):''}</p>${pocketNote?'<p class="sv-hint">'+pocketNote+'</p>':''}<div class="sv-actions"><button type="button" class="sv-button" data-sv-edit="${esc(e.id)}">编辑</button><button type="button" class="sv-button" data-sv-delete="${esc(e.id)}">删除</button></div></article>`;
   }).join('')||'<p class="sv-empty">当前条件下没有流水。可切换期间、账户或筛选条件。</p>';
   $$('#svFlows [data-sv-edit]').forEach(b=>b.onclick=()=>svEditEntry(b.dataset.svEdit));
   $$('#svFlows [data-sv-delete]').forEach(b=>b.onclick=()=>svDeleteEntry(b.dataset.svDelete));
@@ -3855,11 +3863,11 @@ function renderSavings(){
   $('#svDate').max=todayStr();
   $('#svToField').hidden=$('#svKind').value!=='transfer';
   $('#svEntryForm').hidden=amountPrivacy||!accounts.some(a=>!a.archived);
-  $('#svEntryHint').textContent=amountPrivacy?'金额已隐藏，关闭顶部金额隐私后可记一笔。':accounts.some(a=>!a.archived)?'存入和取出仅影响存款余额，不会自动生成日常收支。':'请先添加或启用一个账户。';
+  $('#svEntryHint').textContent=amountPrivacy?'金额已隐藏，关闭顶部金额隐私后可记一笔。':fmPocket()?'普通转入小荷包计为新增存钱。补回和应急取用请从「发薪分配计划」记录。':accounts.some(a=>!a.archived)?'存入和取出仅影响存款余额，不会自动生成日常收支。':'请先添加或启用一个账户。';
   const error=svValidate(S);
   $('#svIntegrity').hidden=!error;
   $('#svIntegrity').textContent=error?'记录需要核对：'+maskMoneyText(error)+' 当前余额可能异常，请检查历史流水。':'';
-  svRenderStats();svRenderFlows();svRenderWealth();svRenderGoals();
+  svRenderStats();svRenderFlows();svRenderWealth();renderFundManager();svRenderGoals();
 }
 $('#svAddAccount').onclick=()=>svOpenAccount();
 $('#svDate').value=todayStr();$('#svPeriod').value=todayStr().slice(0,7);
@@ -3990,6 +3998,15 @@ function svGoals(){
 }
 function svRenderGoals(){
   const goals=svGoals(),today=todayStr(),year=today.slice(0,4);
+  $('#svEditGoals').disabled=amountPrivacy;
+  $('#svEditGoals').textContent=fmPocket()?'设年目标':'设置目标';
+  if(fmPocket()){
+    fmRenderGoals(today);
+    $('#svLegacyGoals').hidden=true;
+    $('#svLegacyGoalsText').textContent='';
+    return;
+  }
+  $('#svGoalsHint').textContent='净存入按存入减取出计算，全部账户互转相抵。目标进度截至今天。';
   const month=svSummary(today.slice(0,7)+'-01',today),annual=svSummary(year+'-01-01',today);
   $('#svGoals').innerHTML=[
     ['本月净存入',month.net,goals.monthNetTargetCents,month.recorded],
@@ -4023,7 +4040,7 @@ function svGoalsDialog(){
 }
 $('#svAddAsset').onclick=()=>svPositionDialog(null,'asset');
 $('#svAddDebt').onclick=()=>svPositionDialog(null,'liability');
-$('#svEditGoals').onclick=svGoalsDialog;
+$('#svEditGoals').onclick=()=>fmPocket()?fmYearDialog():svGoalsDialog();
 
 /* ============ 资金管理（v3.20.23 demo） ============ */
 const FM_DEFAULT_DIRS=[
@@ -4049,129 +4066,399 @@ function ensureFundMgr(){
   if(!S.fundMgr.liabilities)S.fundMgr.liabilities=JSON.parse(JSON.stringify(FM_DEFAULT_LIABS));
   return S.fundMgr;
 }
-function fmCondPass(cond,threshold,income){
-  if(cond==='always'||cond===undefined||cond===null)return true;
-  if(cond==='lt')return income<threshold;
-  if(cond==='lte')return income<=threshold;
-  if(cond==='gt')return income>threshold;
-  if(cond==='gte')return income>=threshold;
-  return true;
+const FM_METHODS={fixed:'固定金额',percent:'工资比例',remainder:'剩余金额'};
+const FM_CONDITIONS={always:'不限制',lt:'低于',lte:'不超过',gt:'高于',gte:'不低于'};
+let fmIncomeDraft=null,fmDraftMonth='',fmBonusDraft=false;
+
+function fmValidSettings(settings){
+  return Array.isArray(settings?.directions)&&settings.directions.every(d=>d&&typeof d.id==='string'&&typeof d.name==='string')&&
+    Array.isArray(settings.rules)&&settings.rules.every(r=>r&&typeof r.id==='string');
 }
-/* 规则引擎：按 rules 顺序分配，fixed=固定额 / percent=收入的百分比 / remainder=剩余全给该方向 */
-function fmCalc(income){
-  const fm=ensureFundMgr();
-  income=parseFloat(income)||0;
-  const alloc={};fm.directions.forEach(d=>alloc[d.id]=0);
-  let remain=income;
-  fm.rules.forEach(r=>{
-    if(r.enabled===false)return;
-    if(!fmCondPass(r.cond,r.threshold,income))return;
-    let v=0;
-    if(r.method==='fixed')v=Math.min(r.value||0,remain);
-    else if(r.method==='percent')v=Math.min((income*(r.value||0)/100),remain);
-    else if(r.method==='remainder')v=Math.max(0,remain);
-    if(v>0){alloc[r.target]=(alloc[r.target]||0)+v;remain-=v;}
-  });
-  return {income,alloc,remain};
+function fmSettings(){
+  if(fmValidSettings(S.savingsPayroll))return S.savingsPayroll;
+  const legacy=ensureFundMgr();
+  return {
+    directions:legacy.directions.map(d=>({...d,saving:['d_fsave','d_ysave'].includes(d.id)})),
+    rules:legacy.rules,pocketId:''
+  };
 }
-function fmRenderSuggest(income){
-  income=parseFloat(income)||0;
-  const items=[
-    {name:'建议储蓄 50%',amt:income*0.5,color:'#b9a88c'},
-    {name:'建议投资 15%',amt:income*0.15,color:'#7a9a5a'},
-    {name:'建议自由支配 35%',amt:income*0.35,color:'#5a7a8a'}
+function fmPocket(id=S.savingsPayroll?.pocketId){
+  return svAccounts().find(account=>account.id===id);
+}
+function fmPlans(){
+  return svRecords('savingsPayPlans').filter(plan=>!plan.deletedAt&&Number.isSafeInteger(plan.targetCents)&&plan.targetCents>=0);
+}
+function fmPlan(id){
+  return fmPlans().find(plan=>plan.id===id);
+}
+function fmConditionPass(rule,incomeCents){
+  const threshold=svCents(rule.threshold??0,true);
+  switch(rule.cond){
+    case 'lt':return incomeCents<threshold;
+    case 'lte':return incomeCents<=threshold;
+    case 'gt':return incomeCents>threshold;
+    case 'gte':return incomeCents>=threshold;
+    default:return true;
+  }
+}
+function fmCalc(incomeCents,settings=fmSettings()){
+  const alloc=new Map(settings.directions.map(d=>[d.id,0]));
+  let remain=incomeCents;
+  const remainders=[];
+  for(const rule of settings.rules){
+    if(rule.enabled===false||!fmConditionPass(rule,incomeCents))continue;
+    if(!alloc.has(rule.target)||!Object.hasOwn(FM_METHODS,rule.method))return {error:'有规则的方向或分配方式无效，请在规则里修改。'};
+    if(rule.method==='remainder'){remainders.push(rule);continue;}
+    const value=svCents(rule.value,true);
+    if(value===null||(rule.method==='percent'&&value>10000))return {error:'有规则金额或比例无效，请在规则里修改。'};
+    const amount=rule.method==='percent'?Math.round(incomeCents*(value/10000)):value;
+    alloc.set(rule.target,alloc.get(rule.target)+amount);
+    remain-=amount;
+  }
+  if(remain<0)return {error:'分配超过工资 '+svMoney(-remain)+'，请先调整规则。'};
+  if(remainders.length>1)return {error:'当前工资命中了多条剩余规则，请停用或调整其中一条。'};
+  if(remainders.length){
+    const target=remainders[0].target;
+    alloc.set(target,alloc.get(target)+remain);
+    remain=0;
+  }
+  const rows=settings.directions.map(d=>({id:d.id,name:d.name,saving:!!d.saving,cents:alloc.get(d.id)}));
+  return {rows,remain,targetCents:rows.filter(row=>row.saving).reduce((sum,row)=>sum+row.cents,0)};
+}
+function fmValidatePocketHistory(entries,openingByPocket={}){
+  const byPocket=new Map();
+  for(const entry of entries){
+    if(!entry.payrollTag)continue;
+    const {kind,pocketId,repayCents}=entry.payrollTag;
+    const delta=svDelta(entry,pocketId);
+    const funding=kind==='funding'&&delta>0&&Number.isSafeInteger(repayCents)&&repayCents>=0&&repayCents<=delta;
+    const emergency=kind==='emergency'&&delta<0;
+    if(!pocketId||(!funding&&!emergency))return '小荷包流水的账户、方向或补回金额无效。';
+    if(!byPocket.has(pocketId))byPocket.set(pocketId,new Map());
+    const days=byPocket.get(pocketId);
+    days.set(entry.date,(days.get(entry.date)||0)+(emergency?-delta:-repayCents));
+  }
+  for(const [id,days] of byPocket){
+    let pending=fmOpeningPending(openingByPocket,id);
+    for(const [date,delta] of [...days].sort(([a],[b])=>a.localeCompare(b))){
+      pending+=delta;
+      if(!Number.isSafeInteger(pending)||pending<0)return date+' 的补回超过待补金额，请核对前序应急流水和日期。';
+    }
+  }
+  return '';
+}
+function fmOpeningPending(openingByPocket,id){
+  const value=openingByPocket?.[id];
+  return Number.isSafeInteger(value)&&value>=0&&value<=SV_LIMIT?value:0;
+}
+function fmPocketMetrics(today=todayStr(),pocketId=fmPocket()?.id){
+  const month=today.slice(0,7),year=today.slice(0,4);
+  let pending=fmOpeningPending(S.savingsPayroll?.openingByPocket,pocketId),monthly=0,yearly=0;
+  for(const entry of svEntries()){
+    const tag=entry.payrollTag;
+    if(!tag||entry.date>today)continue;
+    const funding=tag.kind==='funding'&&Number.isSafeInteger(tag.repayCents);
+    if(tag.pocketId===pocketId){
+      if(tag.kind==='emergency')pending+=entry.amountCents;
+      if(funding)pending-=tag.repayCents;
+    }
+    if(funding&&entry.date.startsWith(year)){
+      const added=entry.amountCents-tag.repayCents;
+      yearly+=added;
+      if(entry.date.startsWith(month))monthly+=added;
+    }
+  }
+  return {pending:Math.max(0,pending),monthly,yearly};
+}
+function fmForecast(today,metrics){
+  const month=today.slice(0,7),monthNumber=+month.slice(5),[year]=month.split('-').map(Number);
+  const oldest=fmtDate(new Date(year,monthNumber-12,1)).slice(0,7);
+  const recent=fmPlans().filter(p=>/^\d{4}-\d{2}$/.test(p.id)&&p.id>=oldest&&p.id<=month&&!p.bonus)
+    .sort((a,b)=>b.id.localeCompare(a.id)).slice(0,3).map(plan=>plan.targetCents).sort((a,b)=>a-b);
+  const current=fmPlan(month),remaining=12-monthNumber;
+  if(!current&&!recent.length)return null;
+  if(remaining&&!recent.length)return null;
+  const mid=Math.floor(recent.length/2);
+  const baseline=recent.length%2===0?Math.round(((recent[mid-1]||0)+(recent[mid]||0))/2):recent[mid];
+  const expectedMonth=Math.max(metrics.monthly,current?.targetCents??baseline);
+  return {amount:metrics.yearly-metrics.monthly+expectedMonth+remaining*baseline,baseline,count:recent.length,remaining};
+}
+function fmRenderGoals(today){
+  const stats=fmPocketMetrics(today),month=fmPlan(today.slice(0,7)),year=fmPlan(today.slice(0,4));
+  const estimate=fmForecast(today,stats);
+  const rows=[
+    ['本月新增存钱',stats.monthly,month?.targetCents],
+    ['本年累计新增',stats.yearly,year?.targetCents]
   ];
-  return items.map(it=>`<div class="fm-cell"><div class="fm-amt" style="color:${it.color}">${money(it.amt)}</div><div class="fm-lab">${it.name}</div></div>`).join('');
+  $('#svGoals').innerHTML=rows.map(([label,actual,target])=>{
+    const percent=target>0?Math.min(100,actual/target*100):0;
+    return '<div class="sv-goal-row"><div class="sv-heading"><b>'+label+'</b><span>'+svMoney(actual)+' / '+(target===undefined?'未设置':svMoney(target))+'</span></div>'+
+      (!amountPrivacy&&target>0?'<progress max="100" value="'+percent+'" aria-label="'+label+'目标进度"></progress>':'')+'</div>';
+  }).join('')+(estimate?'<div class="sv-goal-row"><div class="sv-heading"><b>年末预计新增</b><strong>'+svMoney(estimate.amount)+'</strong></div><p>'+
+    (estimate.remaining?'按已记录的新增、本月计划及近期 '+estimate.count+' 个常规月的计划值估算，余下 '+estimate.remaining+' 个月按 '+svMoney(estimate.baseline)+' / 月。':'按本年已记录的新增和本月计划估算。')+
+    '</p></div>':'<p class="sv-hint">确认常规工资月的计划后，显示年度建议。</p>');
+  $('#svGoalsHint').textContent='目标进度累计小荷包新增存入。补回单列，实际可用金额请看账户余额。';
 }
-function fmRenderResult(){
-  const fm=ensureFundMgr();
-  const r=fmCalc(fm.income);
-  let cells=fm.directions.map(d=>`<div class="fm-cell"><div class="fm-amt" style="color:${d.color}">${money(r.alloc[d.id]||0)}</div><div class="fm-lab">${esc(d.name)}</div></div>`).join('');
-  if(!amountPrivacy&&r.remain>0.005)cells+=`<div class="fm-cell"><div class="fm-amt" style="color:var(--warn)">${money(r.remain)}</div><div class="fm-lab">未分配剩余</div></div>`;
-  else if(!amountPrivacy&&r.remain<-0.005)cells+=`<div class="fm-cell"><div class="fm-amt" style="color:var(--bad)">${money(r.remain)}</div><div class="fm-lab">超出收入</div></div>`;
-  return {html:cells,income:r.income};
+function fmSavePlan(plan){
+  const plans=svRecords('savingsPayPlans').filter(item=>item.id!==plan.id);
+  S.savingsPayPlans=[...plans,plan];
+  persist();renderSavings();
 }
-function fmRenderRules(){
-  const fm=ensureFundMgr();
-  if(amountPrivacy){$('#fmRules').innerHTML='<p class="muted">金额隐私开启时隐藏分配规则</p>';return;}
-  if(!fm.rules.length){$('#fmRules').innerHTML='<div class="muted" style="margin-top:6px">暂无规则，点「＋ 规则」添加</div>';return;}
-  $('#fmRules').innerHTML=fm.rules.map((r,i)=>{
-    const dirOpts=fm.directions.map(d=>`<option value="${d.id}" ${d.id===r.target?'selected':''}>${esc(d.name)}</option>`).join('');
-    const methodOpts=[['fixed','固定额'],['percent','百分比'],['remainder','剩余']].map(m=>`<option value="${m[0]}" ${m[0]===r.method?'selected':''}>${m[1]}</option>`).join('');
-    const condOpts=[['always','总是'],['lt','收入<'],['gt','收入>'],['lte','收入≤'],['gte','收入≥']].map(c=>`<option value="${c[0]}" ${c[0]===r.cond?'selected':''}>${c[1]}</option>`).join('');
-    const showVal=r.method!=='remainder';
-    const showTh=r.cond&&r.cond!=='always';
-    return `<div class="fm-rule" data-i="${i}">
-      <div class="fm-rule-line">
-        <select class="fm-sel fm-r-target">${dirOpts}</select>
-        <select class="fm-sel fm-r-method">${methodOpts}</select>
-        ${showVal?`<input class="fm-num fm-r-value" type="number" value="${r.value||0}">`:''}
-        ${r.method==='percent'?'<span class="fm-unit">%</span>':''}
-      </div>
-      <div class="fm-rule-line">
-        <select class="fm-sel fm-r-cond">${condOpts}</select>
-        ${showTh?`<input class="fm-num fm-r-th" type="number" value="${r.threshold||0}">`:''}
-        <label class="fm-sw"><input type="checkbox" class="fm-r-on" ${(r.enabled===false)?'':'checked'}><span>启用</span></label>
-        <button class="fm-del" data-del="${i}">×</button>
-      </div>
-    </div>`;
-  }).join('');
-  $$('#fmRules .fm-rule').forEach(row=>{
-    const i=+row.dataset.i;
-    const upd=()=>{const r=fm.rules[i];if(!r)return;r.target=row.querySelector('.fm-r-target').value;r.method=row.querySelector('.fm-r-method').value;const v=row.querySelector('.fm-r-value');if(v)r.value=parseFloat(v.value)||0;r.cond=row.querySelector('.fm-r-cond').value;const th=row.querySelector('.fm-r-th');if(th)r.threshold=parseFloat(th.value)||0;r.enabled=row.querySelector('.fm-r-on').checked;persist();renderFundManager();};
-    row.querySelector('.fm-r-target').onchange=upd;
-    row.querySelector('.fm-r-method').onchange=upd;
-    row.querySelector('.fm-r-cond').onchange=upd;
-    const v=row.querySelector('.fm-r-value');if(v)v.onchange=upd;
-    const th=row.querySelector('.fm-r-th');if(th)th.onchange=upd;
-    row.querySelector('.fm-r-on').onchange=upd;
-    row.querySelector('.fm-del').onclick=()=>{fm.rules.splice(i,1);persist();renderFundManager();};
-  });
+function fmYearDialog(){
+  if(!requireVisibleAmounts('设置年度目标'))return;
+  const today=todayStr(),id=today.slice(0,4),current=fmPlan(id);
+  const estimate=fmForecast(today,fmPocketMetrics(today));
+  const value=current?.targetCents??estimate?.amount;
+  const finish=svDialog(id+' 年存钱目标',
+    '<label class="sv-full">年度新增目标（元）<input id="fmYearAmount" inputmode="decimal" maxlength="18" required value="'+(value===undefined?'':value/100)+'"></label>'+
+    (estimate?'<p class="sv-hint sv-full">按现有计划预计 '+svMoney(estimate.amount)+'。</p><div class="sv-full"><button type="button" class="sv-button" id="fmUseEstimate">采用建议值</button></div>':''),'fmEditForm');
+  if(estimate)$('#fmUseEstimate').onclick=()=>{$('#fmYearAmount').value=String(estimate.amount/100);};
+  $('#fmEditForm').onsubmit=event=>{
+    event.preventDefault();
+    if(stableNote(current)!==stableNote(fmPlan(id))){$('#svDialogError').textContent='年度目标已更新，请重新打开。';return;}
+    const targetCents=svCents($('#fmYearAmount').value,true);
+    if(targetCents===null){$('#svDialogError').textContent='请输入非负金额，最多两位小数。';return;}
+    fmSavePlan({id,targetCents,updatedAt:timeEditTimestamp(current)});
+    finish();toast('年度目标已保存');
+  };
 }
-function fmRenderDirs(){
-  const fm=ensureFundMgr();
-  $('#fmDirs').innerHTML=fm.directions.map((d,i)=>`<span class="fm-dir" data-i="${i}"><span class="d" style="background:${d.color}"></span><input class="fm-dir-name" value="${esc(d.name)}" maxlength="8" style="width:64px;border:none;background:transparent;font:inherit;color:inherit"><span class="x" data-del="${i}">×</span></span>`).join('');
-  $$('#fmDirs .fm-dir').forEach(el=>{
-    const i=+el.dataset.i;
-    el.querySelector('.fm-dir-name').onchange=e=>{fm.directions[i].name=e.target.value.trim()||'方向';persist();renderFundManager();};
-    el.querySelector('.x').onclick=()=>{
-      const used=fm.rules.some(r=>r.target===fm.directions[i].id);
-      if(used){toast('该方向正被规则引用，先删除相关规则');return;}
-      fm.directions.splice(i,1);persist();renderFundManager();
-    };
-  });
+
+function fmWriteSettings(snapshot,next){
+  if(stableNote(fmSettings())!==snapshot)return '其他设备已更新设置，请重新打开再保存。';
+  const error=fmValidatePocketHistory(svEntries(),next.openingByPocket);
+  if(error)return error;
+  S.savingsPayroll={...next,updatedAt:timeEditTimestamp(S.savingsPayroll)};
+  persist();renderSavings();
+  return '';
 }
-function setFundAmountField(input,value){
-  if(!input)return;
-  input.disabled=amountPrivacy;
-  if(amountPrivacy){
-    if(!input.hasAttribute('data-open-placeholder'))input.setAttribute('data-open-placeholder',input.placeholder);
-    input.placeholder=MONEY_MASK;
-    input.value='';
-    return;
+function fmOptList(options,selected){
+  return Object.entries(options).map(([id,label])=>'<option value="'+esc(id)+'"'+(id===selected?' selected':'')+'>'+esc(label)+'</option>').join('');
+}
+function fmRuleDialog(id){
+  if(!requireVisibleAmounts('编辑分配规则'))return;
+  const settings=fmSettings(),snapshot=stableNote(settings),existing=settings.rules.find(r=>r.id===id);
+  const rule=existing||{target:settings.directions[0]?.id,method:'fixed',cond:'always',value:0,threshold:0,enabled:true};
+  const dir=Object.fromEntries(settings.directions.map(d=>[d.id,d.name]));
+  const finish=svDialog(existing?'编辑分配规则':'新建分配规则',
+    '<label>分到<select id="fmRuleTarget">'+fmOptList(dir,rule.target)+'</select></label>'+
+    '<label>分法<select id="fmRuleMethod">'+fmOptList(FM_METHODS,rule.method)+'</select></label>'+
+    '<label id="fmRuleValueWrap"><span id="fmRuleValueLabel"></span><input id="fmRuleValue" inputmode="decimal" maxlength="18" value="'+esc(rule.value??0)+'"></label>'+
+    '<label>生效条件<select id="fmRuleCond">'+fmOptList(FM_CONDITIONS,rule.cond||'always')+'</select></label>'+
+    '<label id="fmRuleThresholdWrap">工资门槛（元）<input id="fmRuleThreshold" inputmode="decimal" maxlength="18" value="'+esc(rule.threshold??0)+'"></label>'+
+    '<label class="fm-check"><input id="fmRuleEnabled" type="checkbox"'+(rule.enabled!==false?' checked':'')+'>启用规则</label>'+
+    (existing?'<div class="sv-full"><button type="button" class="sv-button fm-danger" id="fmRemoveRule">删除规则</button></div>':''),'fmEditForm');
+  const update=()=>{
+    const method=$('#fmRuleMethod').value;
+    $('#fmRuleValueWrap').hidden=method==='remainder';
+    $('#fmRuleValueLabel').textContent=method==='percent'?'工资比例（%）':'金额（元）';
+    $('#fmRuleThresholdWrap').hidden=$('#fmRuleCond').value==='always';
+  };
+  $('#fmRuleMethod').onchange=update;
+  $('#fmRuleCond').onchange=update;
+  update();
+  function save(rules){
+    const error=fmWriteSettings(snapshot,{...settings,rules});
+    if(error){$('#svDialogError').textContent=error;return;}
+    finish();toast('规则已更新');
   }
-  if(input.hasAttribute('data-open-placeholder')){
-    input.placeholder=input.getAttribute('data-open-placeholder');
-    input.removeAttribute('data-open-placeholder');
+  if(existing)$('#fmRemoveRule').onclick=()=>save(settings.rules.filter(item=>item.id!==id));
+  $('#fmEditForm').onsubmit=event=>{
+    event.preventDefault();
+    const target=$('#fmRuleTarget').value,method=$('#fmRuleMethod').value,cond=$('#fmRuleCond').value;
+    const value=method==='remainder'?0:svCents($('#fmRuleValue').value,true);
+    const threshold=cond==='always'?0:svCents($('#fmRuleThreshold').value,true);
+    if(!target||value===null||threshold===null||(method==='percent'&&value>10000)){
+      $('#svDialogError').textContent='请核对金额、工资门槛和 0–100% 的分配比例。';return;
+    }
+    const next={id:id||uid(),target,method,cond,value:value/100,threshold:threshold/100,enabled:$('#fmRuleEnabled').checked};
+    save(existing?settings.rules.map(item=>item.id===id?next:item):[...settings.rules,next]);
+  };
+}
+function fmDirectionDialog(id){
+  if(!requireVisibleAmounts('编辑分配方向'))return;
+  const settings=fmSettings(),snapshot=stableNote(settings),existing=settings.directions.find(d=>d.id===id);
+  const finish=svDialog(existing?'编辑分配方向':'新建分配方向',
+    '<label class="sv-full">方向名称<input id="fmDirectionName" maxlength="24" required value="'+esc(existing?.name||'')+'"></label>'+
+    '<label class="fm-check sv-full"><input id="fmDirectionSaving" type="checkbox"'+(existing?.saving?' checked':'')+'>计入小荷包目标</label>'+
+    (existing?'<div class="sv-full"><button type="button" class="sv-button fm-danger" id="fmRemoveDirection">删除方向</button></div>':''),'fmEditForm');
+  function save(directions){
+    const error=fmWriteSettings(snapshot,{...settings,directions});
+    if(error){$('#svDialogError').textContent=error;return;}
+    finish();toast('分配方向已更新');
   }
-  if(document.activeElement!==input)input.value=value;
+  if(existing)$('#fmRemoveDirection').onclick=()=>{
+    if(settings.rules.some(rule=>rule.target===id)){$('#svDialogError').textContent='该方向仍有规则，请先调整或删除这些规则。';return;}
+    save(settings.directions.filter(d=>d.id!==id));
+  };
+  $('#fmEditForm').onsubmit=event=>{
+    event.preventDefault();
+    const name=$('#fmDirectionName').value.trim();
+    if(!name||settings.directions.some(d=>d.id!==id&&d.name===name)){
+      $('#svDialogError').textContent='请输入不重复的方向名称。';return;
+    }
+    const next={...existing,id:id||uid(),name,saving:$('#fmDirectionSaving').checked};
+    save(existing?settings.directions.map(d=>d.id===id?next:d):[...settings.directions,next]);
+  };
+}
+
+function fmPocketDialog(){
+  if(!requireVisibleAmounts('选择小荷包'))return;
+  const accounts=svAccounts().filter(a=>!a.archived),settings=fmSettings(),snapshot=stableNote(settings);
+  if(!accounts.length){svOpenAccount();return;}
+  const finish=svDialog('小荷包设置',
+    '<label class="sv-full">储蓄专用账户<select id="fmPocketAccount" required><option value="">请选择</option>'+svOptions(accounts,settings.pocketId)+'</select></label>'+
+    '<label class="sv-full">启用前已有待补（元）<input id="fmOpeningPending" inputmode="decimal" maxlength="18" required value="'+fmOpeningPending(settings.openingByPocket,settings.pocketId)/100+'"></label>'+
+    '<p class="sv-hint sv-full">这里可补记启用前欠小荷包的金额，余额保持原样。</p>','fmEditForm');
+  $('#fmPocketAccount').onchange=()=>{
+    $('#fmOpeningPending').value=String(fmOpeningPending(settings.openingByPocket,$('#fmPocketAccount').value)/100);
+  };
+  $('#fmEditForm').onsubmit=event=>{
+    event.preventDefault();
+    const pocketId=$('#fmPocketAccount').value;
+    const opening=svCents($('#fmOpeningPending').value,true);
+    if(opening===null){$('#svDialogError').textContent='已有待补需为非负金额，最多两位小数。';return;}
+    if(!fmPocket(pocketId)||fmPocket(pocketId).archived){$('#svDialogError').textContent='请选择有效的存款账户。';return;}
+    if(settings.pocketId!==pocketId&&fmPocketMetrics(todayStr(),settings.pocketId).pending>0){
+      $('#svDialogError').textContent='原小荷包仍有待补金额，请补回后再换账户。';return;
+    }
+    const error=fmWriteSettings(snapshot,{...settings,pocketId,openingByPocket:{...settings.openingByPocket,[pocketId]:opening}});
+    if(error){$('#svDialogError').textContent=error;return;}
+    finish();toast('小荷包已设置');
+  };
+}
+function fmPocketEntryDialog(kind,original){
+  const funding=kind==='funding';
+  const pocket=fmPocket(original?.payrollTag.pocketId);
+  if(!requireVisibleAmounts('记小荷包流水')||!pocket||(!original&&pocket.archived))return;
+  const stats=fmPocketMetrics(todayStr(),pocket.id),target=fmPlan(todayStr().slice(0,7))?.targetCents??0;
+  const accounts=svAccounts().filter(a=>a.id!==pocket.id&&(!a.archived||[original?.accountId,original?.toAccountId].includes(a.id)));
+  const other=original?.kind==='transfer'?(funding?original.accountId:original.toAccountId):'';
+  const repay=original?original.payrollTag.repayCents:stats.pending;
+  const fresh=original?original.amountCents-repay:Math.max(0,target-stats.monthly);
+  const finish=svDialog(original?'编辑小荷包流水':funding?'记入小荷包':'记应急取用',
+    '<p class="sv-hint sv-full">'+esc(pocket.name)+' · 当前待补 '+svMoney(stats.pending)+'</p>'+
+    '<label class="sv-full">'+(funding?'转出账户':'转入账户')+'<select id="fmEntryOther"><option value="">'+(funding?'外部资金或未记录的账户':'直接取用或未记录的账户')+'</option>'+svOptions(accounts,other)+'</select></label>'+
+    (funding?'<label>新增存钱（元）<input id="fmEntryAmount" inputmode="decimal" maxlength="18" value="'+fresh/100+'" required></label>'+
+      '<label>补回（元）<input id="fmEntryRepay" inputmode="decimal" maxlength="18" value="'+repay/100+'" required></label>':
+      '<label>应急取用（元）<input id="fmEntryAmount" inputmode="decimal" maxlength="18" value="'+(original?original.amountCents/100:'')+'" required></label>')+
+    '<label>日期<input id="fmEntryDate" type="date" min="1900-01-01" max="'+todayStr()+'" value="'+esc(original?.date||todayStr())+'" required></label>'+
+    '<label class="sv-full">备注<input id="fmEntryNote" maxlength="120" value="'+esc(original?.note||'')+'"></label>'+
+    (funding?'<p class="sv-hint sv-full" id="fmEntryTotal"></p>':''),'fmEditForm');
+  function showTotal(){
+    const a=svCents($('#fmEntryAmount').value,true),r=svCents($('#fmEntryRepay').value,true);
+    $('#fmEntryTotal').textContent=a===null||r===null?'':'合计转入 '+svMoney(a+r);
+  }
+  if(funding){$('#fmEntryAmount').oninput=showTotal;$('#fmEntryRepay').oninput=showTotal;showTotal();}
+  $('#fmEditForm').onsubmit=event=>{
+    event.preventDefault();
+    if(!requireVisibleAmounts('记小荷包流水'))return;
+    const live=original&&svEntries().find(e=>e.id===original.id);
+    if(original?stableNote(live)!==stableNote(original):fmPocket()?.id!==pocket.id||fmPocket()?.archived){
+      $('#svDialogError').textContent='账户或流水已更新，请重新打开。';return;
+    }
+    const amount=svCents($('#fmEntryAmount').value,funding),repayCents=funding?svCents($('#fmEntryRepay').value,true):0;
+    const counterparty=$('#fmEntryOther').value,amountCents=amount+repayCents;
+    if(amount===null||repayCents===null||amountCents<=0||amountCents>SV_LIMIT){
+      $('#svDialogError').textContent='请输入有效金额，合计须大于零，最多两位小数。';return;
+    }
+    if(counterparty&&!svAccounts().some(a=>a.id===counterparty&&(!a.archived||counterparty===other))){
+      $('#svDialogError').textContent='对方账户已停用，请重新选择。';return;
+    }
+    const record={...original,id:original?.id||uid(),kind:counterparty?'transfer':funding?'deposit':'withdraw',
+      accountId:funding&&counterparty?counterparty:pocket.id,toAccountId:counterparty?(funding?pocket.id:counterparty):'',
+      date:$('#fmEntryDate').value,note:$('#fmEntryNote').value.trim(),amountCents,
+      payrollTag:{kind,pocketId:pocket.id,repayCents},updatedAt:timeEditTimestamp(original)};
+    const error=svPut('savingsEntries',record);
+    if(error){$('#svDialogError').textContent=error;return;}
+    finish();toast(funding?'小荷包转入已记录':'应急取用已记录');
+  };
+}
+
+function fmRenderRules(settings){
+  const {directions,rules}=settings,names=new Map(directions.map(d=>[d.id,d.name]));
+  const ordered=[...rules.filter(r=>r.method!=='remainder'),...rules.filter(r=>r.method==='remainder')];
+  $('#fmRules').innerHTML=amountPrivacy?'<p class="sv-hint">金额隐私开启时隐藏分配规则</p>':ordered.map(r=>{
+    const amount=r.method==='fixed'?money(Number(r.value)||0):r.method==='percent'?esc(r.value)+'%':'全部剩余';
+    const detail=r.cond&&r.cond!=='always'?' · 工资'+(FM_CONDITIONS[r.cond]||'门槛')+money(Number(r.threshold)||0):'';
+    return '<div class="fm-list-row"><div><b>'+esc(names.get(r.target)||'方向缺失')+'</b><small>'+amount+detail+(r.enabled===false?' · 已停用':'')+'</small></div><button class="sv-button" type="button" data-fm-rule="'+esc(r.id)+'">编辑</button></div>';
+  }).join('')||'<p class="sv-hint">还没有分配规则。</p>';
+  $('#fmDirs').innerHTML=amountPrivacy?'':directions.map(d=>'<div class="fm-list-row"><div><b>'+esc(d.name)+'</b><small>'+(d.saving?'计入小荷包目标':'仅参与工资分配')+'</small></div><button class="sv-button" type="button" data-fm-direction="'+esc(d.id)+'">编辑</button></div>').join('');
+  $$('[data-fm-rule]').forEach(button=>button.onclick=()=>fmRuleDialog(button.dataset.fmRule));
+  $$('[data-fm-direction]').forEach(button=>button.onclick=()=>fmDirectionDialog(button.dataset.fmDirection));
+}
+function fmRenderPreview(){
+  const today=todayStr(),month=today.slice(0,7),saved=fmPlan(month),pocket=fmPocket();
+  const income=svCents($('#fmIncome').value),settings=fmSettings();
+  const result=!amountPrivacy&&income!==null?fmCalc(income,settings):null;
+  const isDraft=!!result?.rows&&(!saved||income!==saved.incomeCents||result.targetCents!==saved.targetCents||$('#fmIrregular').checked!==saved.bonus);
+  const oldIncomeReady=!saved&&fmIncomeDraft===null&&income!==null&&svCents(S.fundMgr?.income)===income;
+  $('#fmCalc').disabled=amountPrivacy||!result||!!result.error||!pocket||pocket.archived||!settings.directions.some(d=>d.saving);
+  $('#fmCalc').textContent=saved?'更新本月目标':'设为本月目标';
+  const status=amountPrivacy?'关闭金额隐私后查看发薪计划。':result?.error||
+    (income===null?'填写实际到手工资即可预览。':!settings.directions.some(d=>d.saving)?'请先在分配方向里标记哪些金额计入小荷包目标。':
+      saved?'已确认本月目标 '+svMoney(saved.targetCents)+'。':oldIncomeReady?'已带入旧计划工资，请核对本月实际到手金额。':'预览结果，确认后计入本月目标。');
+  $('#fmPreviewStatus').textContent=status;
+  $('#fmPreviewStatus').classList.toggle('sv-error',!!result?.error);
+  $('#fmBreakdown').hidden=!result?.rows;
+  $('#fmResultGrid').innerHTML=result?.rows?result.rows.map(row=>'<div class="fm-value-row"><span>'+esc(row.name)+(row.saving?'<small>计入目标</small>':'')+'</span><b>'+svMoney(row.cents)+'</b></div>').join('')+
+    (result.remain?'<div class="fm-value-row"><span>未分配</span><b>'+svMoney(result.remain)+'</b></div>':''):'';
+  if(amountPrivacy||!pocket){$('#fmTransferSummary').replaceChildren();return;}
+  const stats=fmPocketMetrics(today),target=result?.targetCents??saved?.targetCents;
+  const remaining=target===undefined?0:Math.max(0,target-stats.monthly);
+  const row=(name,value)=>'<div class="fm-value-row"><span>'+name+'</span><b>'+svMoney(value)+'</b></div>';
+  $('#fmTransferSummary').innerHTML=
+    (target===undefined?'':row(isDraft?'测算月目标':'本月新增存钱目标',target)+(stats.monthly>0?row('本月还需新增',remaining):''))+
+    row('小荷包待补回',stats.pending)+(target===undefined?'':
+      '<div class="fm-value-row fm-total"><span>'+(isDraft?'确认后建议转入':'本次建议转入')+'</span><strong>'+svMoney(remaining+stats.pending)+'</strong></div>');
 }
 function renderFundManager(){
-  const fm=ensureFundMgr();
-  setFundAmountField($('#fmIncome'),fm.income||'');
-  const inc=parseFloat(fm.income)||0;
-  $('#fmSuggestHint').textContent='收入 '+money(inc);
-  $('#fmSuggestGrid').innerHTML=fmRenderSuggest(fm.income);
-  const res=fmRenderResult();
-  $('#fmResultHint').textContent='收入 '+money(res.income)+' · 按规则引擎分配';
-  $('#fmResultGrid').innerHTML=res.html;
-  fmRenderRules();
-  fmRenderDirs();
+  const month=todayStr().slice(0,7),settings=fmSettings(),saved=fmPlan(month),pocket=fmPocket();
+  if(month!==fmDraftMonth){fmIncomeDraft=null;fmBonusDraft=false;fmDraftMonth=month;}
+  const legacy=svCents(S.fundMgr?.income??0)||0,hasMonthly=fmPlans().some(plan=>plan.id.length===7);
+  const base=saved?.incomeCents??(hasMonthly?0:legacy);
+  const input=$('#fmIncome');
+  if(amountPrivacy||document.activeElement!==input)input.value=amountPrivacy?'':(fmIncomeDraft??(base?String(base/100):''));
+  input.disabled=amountPrivacy;
+  $('#fmIrregular').disabled=amountPrivacy;
+  $('#fmIrregular').checked=!amountPrivacy&&(fmIncomeDraft!==null?fmBonusDraft:!!saved?.bonus);
+  $('#fmMonth').textContent=month.replace('-',' 年 ')+' 月';
+  $('#fmSetPocket').textContent=pocket?'小荷包设置':'选小荷包';
+  $('#fmPocketHint').textContent=pocket?'储蓄账户：'+pocket.name+(pocket.archived?'（已停用）':''):'先选择一个存款账户作为小荷包。';
+  for(const id of ['fmSetPocket','fmAddRule','fmAddDir'])$('#'+id).disabled=amountPrivacy;
+  for(const id of ['fmRecordIn','fmRecordOut'])$('#'+id).disabled=amountPrivacy||!pocket||pocket.archived;
+  fmRenderPreview();
+  fmRenderRules(settings);
+  const history=fmPlans().filter(p=>/^\d{4}-\d{2}$/.test(p.id)).sort((a,b)=>b.id.localeCompare(a.id));
+  $('#fmHistoryList').innerHTML=amountPrivacy?'<p class="sv-hint">计划金额已隐藏。</p>':history.map(p=>
+    '<details class="fm-history-item"><summary>'+esc(p.id)+(p.bonus?' · 含奖金':'')+' · 目标 '+svMoney(p.targetCents)+'</summary>'+
+    '<p class="sv-hint">到手工资 '+svMoney(p.incomeCents||0)+'</p>'+
+    (Array.isArray(p.allocations)?p.allocations.map(row=>'<div class="fm-value-row"><span>'+esc(row.name)+'</span><b>'+svMoney(row.cents)+'</b></div>').join(''):'')+
+    '</details>').join('')||'<p class="sv-hint">尚未确认月度计划。</p>';
 }
-$('#fmIncome').oninput=()=>{if(amountPrivacy)return;const fm=ensureFundMgr();fm.income=parseFloat($('#fmIncome').value)||0;persist();renderFundManager();};
-$('#fmCalc').onclick=()=>{if(!requireVisibleAmounts('计算分配'))return;const fm=ensureFundMgr();fm.income=parseFloat($('#fmIncome').value)||0;persist();renderFundManager();toast('已按当前收入计算分配');};
-$('#fmAddRule').onclick=()=>{if(!requireVisibleAmounts('编辑分配规则'))return;const fm=ensureFundMgr();const def=fm.directions[0]?fm.directions[0].id:'d_free';fm.rules.push({id:'r_'+uid().slice(0,6),target:def,method:'fixed',value:0,cond:'always',enabled:true});persist();renderFundManager();};
-$('#fmAddDir').onclick=()=>{const fm=ensureFundMgr();fm.directions.push({id:'d_'+uid().slice(0,6),name:'新方向',color:CAT_PALETTE[fm.directions.length%CAT_PALETTE.length]});persist();renderFundManager();};
+function fmRememberDraft(){
+  fmIncomeDraft=$('#fmIncome').value;
+  fmBonusDraft=$('#fmIrregular').checked;
+  fmRenderPreview();
+}
+$('#fmIncome').oninput=fmRememberDraft;
+$('#fmIrregular').onchange=fmRememberDraft;
+$('#fmPayForm').onsubmit=event=>event.preventDefault();
+$('#fmCalc').onclick=()=>{
+  if(!requireVisibleAmounts('确认本月目标')||$('#fmCalc').disabled)return;
+  const pocket=fmPocket(),incomeCents=svCents($('#fmIncome').value);
+  if(incomeCents===null||!pocket||pocket.archived)return;
+  const result=fmCalc(incomeCents);
+  if(result.error)return;
+  const id=todayStr().slice(0,7),previous=fmPlan(id);
+  const next={id,incomeCents,pocketId:pocket.id,targetCents:result.targetCents,allocations:result.rows,bonus:$('#fmIrregular').checked,updatedAt:timeEditTimestamp(previous)};
+  fmIncomeDraft=null;
+  fmSavePlan(next);toast('已更新本月存钱目标');
+};
+$('#fmSetPocket').onclick=fmPocketDialog;
+$('#fmAddRule').onclick=()=>fmRuleDialog();
+$('#fmAddDir').onclick=()=>fmDirectionDialog();
+$('#fmRecordIn').onclick=()=>fmPocketEntryDialog('funding');
+$('#fmRecordOut').onclick=()=>fmPocketEntryDialog('emergency');
 function hexA(hex,a){
   if(!hex)return'rgba(0,0,0,'+a+')';
   hex=(''+hex).replace('#','');
@@ -6213,7 +6500,9 @@ function mergeData(d){
   let savingsMerged=false;
   const goals=timeNewest(S.savingsGoals,d.savingsGoals);
   if(goals&&stableNote(goals)!==stableNote(S.savingsGoals)){S.savingsGoals=goals;savingsMerged=true;}
-  for(const field of ['savingsAccounts','savingsEntries','savingsPositions']){
+  const payroll=timeNewest(S.savingsPayroll,fmValidSettings(d.savingsPayroll)?d.savingsPayroll:null);
+  if(payroll&&stableNote(payroll)!==stableNote(S.savingsPayroll)){S.savingsPayroll=payroll;savingsMerged=true;}
+  for(const field of ['savingsAccounts','savingsEntries','savingsPositions','savingsPayPlans']){
     if(!Array.isArray(d[field]))continue;
     const records=svMergeRecords(S[field],d[field]);
     if(stableNote(records)!==stableNote(svRecords(field)))savingsMerged=true;
@@ -6808,6 +7097,8 @@ function mergeState(remote){
   let changed=mergeLedgerSettings(remote);
   const goals=timeNewest(S.savingsGoals,remote.savingsGoals);
   if(goals&&stableNote(goals)!==stableNote(S.savingsGoals)){S.savingsGoals=goals;changed=true;}
+  const payroll=timeNewest(S.savingsPayroll,fmValidSettings(remote.savingsPayroll)?remote.savingsPayroll:null);
+  if(payroll&&stableNote(payroll)!==stableNote(S.savingsPayroll)){S.savingsPayroll=payroll;changed=true;}
   const unionArr=(loc,rem)=>{
     const map=new Map();
     (loc||[]).forEach(x=>{if(x&&x.id)map.set(x.id,x)});
@@ -6880,7 +7171,7 @@ function mergeState(remote){
     S.habits=[...map.values()];
   }());
   S.ledger=unionArr(S.ledger,remote.ledger);
-  for(const field of ['savingsAccounts','savingsEntries','savingsPositions']){
+  for(const field of ['savingsAccounts','savingsEntries','savingsPositions','savingsPayPlans']){
     if(!Array.isArray(remote[field]))continue;
     const records=svMergeRecords(S[field],remote[field]);
     if(stableNote(records)!==stableNote(svRecords(field)))changed=true;

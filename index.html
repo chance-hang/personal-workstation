@@ -17,7 +17,7 @@
 <link rel="icon" href="./icons/icon.svg?v=20261118-c" type="image/svg+xml" sizes="any">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png?v=20261118-c" sizes="180x180">
 <link rel="manifest" href="./site.webmanifest?v=20261118-c">
-  <link rel="stylesheet" href="styles.css?v=prod-finance-v3.35-20261119-1">
+  <link rel="stylesheet" href="styles.css?v=review-payroll-pocket-20261119-1">
 </head>
 <body>
 <div class="main-area" id="mainArea">
@@ -219,10 +219,39 @@
           <div id="svAccounts"></div>
           <p class="sv-hint">只记录现金、银行卡、微信、支付宝等余额。与日常收支独立，账户互转不算新增存款。</p>
         </div>
+        <details class="card sv-shell sv-rules fm-workflow" id="svAllocationPlan">
+          <summary>发薪分配计划</summary>
+          <div class="fm-section">
+            <div class="sv-heading"><h4 id="fmMonth"></h4><button type="button" class="sv-button" id="fmSetPocket">选小荷包</button></div>
+            <p class="sv-hint" id="fmPocketHint"></p>
+            <form class="sv-form" id="fmPayForm">
+              <label>本月实际到手工资（元）<input id="fmIncome" inputmode="decimal" maxlength="18" autocomplete="off" placeholder="如 8000"></label>
+              <label class="fm-check"><input id="fmIrregular" type="checkbox">含一次性奖金</label>
+            </form>
+            <p class="sv-hint" id="fmPreviewStatus" role="status"></p>
+            <div id="fmTransferSummary" class="fm-summary"></div>
+            <button type="button" class="sv-button sv-primary" id="fmCalc">设为本月目标</button>
+            <div class="sv-actions fm-actions"><button type="button" class="sv-button" id="fmRecordIn">记小荷包转入</button><button type="button" class="sv-button" id="fmRecordOut">记应急取用</button></div>
+            <details class="sv-rules" id="fmBreakdown" hidden><summary>查看分配明细</summary><div id="fmResultGrid" class="fm-result"></div></details>
+          </div>
+          <details class="sv-rules fm-section" id="fmRulePanel">
+            <summary>管理分配规则</summary>
+            <p class="sv-hint">固定金额和工资比例先计算，剩余款最后分配。</p>
+            <div id="fmRules"></div>
+            <button type="button" class="sv-button" id="fmAddRule">＋ 规则</button>
+            <h4>分配方向</h4>
+            <div id="fmDirs"></div>
+            <button type="button" class="sv-button" id="fmAddDir">＋ 方向</button>
+          </details>
+          <details class="sv-rules fm-section" id="fmHistory">
+            <summary>月度计划记录</summary>
+            <div id="fmHistoryList"></div>
+          </details>
+        </details>
         <div class="card sv-shell" id="svGoalsCard">
           <div class="sv-heading"><h3>存钱目标</h3><button type="button" class="sv-button" id="svEditGoals">设置目标</button></div>
           <div id="svGoals"></div>
-          <p class="sv-hint">净存入按存入减取出计算，全部账户互转相抵。目标进度截至今天。</p>
+          <p class="sv-hint" id="svGoalsHint">净存入按存入减取出计算，全部账户互转相抵。目标进度截至今天。</p>
           <details class="sv-rules" id="svLegacyGoals" hidden><summary>旧目标记录</summary><p id="svLegacyGoalsText" class="sv-hint"></p></details>
         </div>
         <div class="card sv-shell" id="svWealthCard">
@@ -274,26 +303,7 @@
           <div id="svFlows"></div>
           <div id="svPagination" class="sv-pagination"></div>
         </div>
-<details class="card sv-shell sv-rules" id="svAllocationPlan"><summary>资金分配计划</summary><p class="sv-hint">按收入安排资金去向，实际存款以账户流水为准。</p>        <div class="card">
-          <div class="field"><span class="lab">本月工资收入</span><input id="fmIncome" type="number" inputmode="decimal" placeholder="如 8000"></div>
-          <button class="btn-main" id="fmCalc">计算分配</button>
-        </div>
-        <div class="card" id="fmSuggest">
-          <div class="row-between"><b>建议分配（按收入比例）</b><span class="muted" id="fmSuggestHint"></span></div>
-          <div class="fm-grid" id="fmSuggestGrid"></div>
-        </div>
-        <div class="card" id="fmResult">
-          <div class="row-between"><b>规则分配结果</b><span class="muted" id="fmResultHint"></span></div>
-          <div class="fm-grid" id="fmResultGrid"></div>
-        </div>
-        <div class="card">
-          <div class="row-between"><b>分配规则</b><button class="mini-btn" id="fmAddRule">＋ 规则</button></div>
-          <div id="fmRules"></div>
-          <div class="div-line" style="margin:12px 0"></div>
-          <div class="row-between"><b>分配方向</b><button class="mini-btn" id="fmAddDir">＋ 方向</button></div>
-          <div id="fmDirs" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"></div>
-        </div>
-</details>
+
       </div>
       <div class="sec" id="moneyFormSec" data-module="moneyForm">
         <div class="page-title">记一笔</div>
@@ -694,6 +704,6 @@
 <div class="modal-mask" id="modalMask"><div class="modal" id="modalBox"></div></div>
 
 
-  <script src="app.js?v=prod-finance-v3.35-20261119-1"></script>
+  <script src="app.js?v=review-payroll-pocket-20261119-1"></script>
 </body>
 </html>
