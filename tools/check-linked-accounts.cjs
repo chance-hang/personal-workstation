@@ -12,6 +12,13 @@ const money=async(p,id)=>p.evaluate(id=>svBalance(svAccounts().find(a=>a.id===id
 const wealth=p=>p.evaluate(()=>svWealth());
 const save=(p,id)=>p.locator('#'+id+' button[type=submit]').click();
 const totals=p=>p.evaluate(()=>({month:monthSum('2026-11'),budget:budgetExpOf('2026-11'),rows:S.ledger.length}));
+const accountChoice=(p,id,group='ledgerAccount')=>p.locator('#'+group+' input[type=radio][value="'+id+'"]');
+const checkedAccount=(p,group='ledgerAccount')=>p.locator('#'+group+' input:checked').inputValue();
+
+async function chooseAccount(page,id,group){
+  const control=accountChoice(page,id,group);
+  await page.locator('label[for="'+await control.getAttribute('id')+'"]').click();
+}
 
 async function open(width=1280){
   const context=await browser.newContext({viewport:{width,height:950},timezoneId:'Asia/Shanghai',reducedMotion:'reduce'});
@@ -29,7 +36,7 @@ async function open(width=1280){
 }
 async function addBill(page,type,account,amount,note,date='2026-11-21'){
   await page.locator('.money-head [data-t="'+type+'"]').click();
-  await page.locator('#ledgerAccount').selectOption(account);
+  await chooseAccount(page,account);
   await page.locator('#amtIn').fill(String(amount));
   await page.locator('#ledgerNoteIn').fill(note);
   await page.locator('#dateIn').fill(date);
@@ -96,11 +103,13 @@ async function sync(page,direction){
   assert.match(await p.locator('#ledgerAccountHint').textContent(),/信用卡欠款/);
   await addBill(p,'income','bank',2000,'虚拟入账');
   assert.equal(await money(p,'bank'),700000);
-  assert.equal(await p.locator('#ledgerAccount option[value="'+card+'"]').count(),0);
+  assert.equal(await accountChoice(p,card).count(),0);
+  assert.equal(await p.getByRole('group',{name:'收款账户'}).count(),1);
   await p.locator('.money-head [data-t=expense]').click();
-  assert.equal(await p.locator('#ledgerAccount').inputValue(),card);
+  assert.equal(await checkedAccount(p),card);
+  assert.equal(await p.getByRole('group',{name:'扣款账户'}).count(),1);
   await p.locator('.money-head [data-t=income]').click();
-  assert.equal(await p.locator('#ledgerAccount').inputValue(),'bank');
+  assert.equal(await checkedAccount(p),'bank');
   assert.deepEqual(await totals(p),{month:{inc:2000,exp:350},budget:350,rows:4});
   pass('income and expenses update selected accounts, preserve budget logic, and remember separate choices');
 
@@ -155,6 +164,12 @@ async function sync(page,direction){
   const other=await open(390);
   assert.equal(await money(other,card),-25000);
   await other.evaluate(id=>editLedgerById(id),bill.id);
+  assert.equal(await checkedAccount(other,'elAccount'),card);
+  await other.locator('#elType').selectOption('income');
+  assert.equal(await accountChoice(other,card,'elAccount').count(),0);
+  assert.equal(await checkedAccount(other,'elAccount'),'');
+  await other.locator('#elType').selectOption('expense');
+  await chooseAccount(other,card,'elAccount');
   await other.locator('#elAmt').fill('180');
   await other.locator('#elSave').click();
   assert.equal(await money(other,card),-28000);
@@ -172,11 +187,20 @@ async function sync(page,direction){
   pass('invalid cash movements stay out, and linked edits and deletions propagate across Mock devices without stale revival');
 
   await view(p,'entry');
+  await chooseAccount(p,'');
+  const unlinked=accountChoice(p,'');
+  await unlinked.focus();
+  await unlinked.press('ArrowRight');
+  assert.equal(await checkedAccount(p),'bank');
+  await p.evaluate(()=>{
+    S.savingsAccounts.push({id:'long-name',name:'很长的虚拟扣款账户名称用来验证手机屏幕空间'.repeat(3)});
+    renderMoney();
+  });
   for(const width of [320,375,414,768]){
     await p.setViewportSize({width,height:950});
     const measured=await p.locator('#moneyFormSec').evaluate(el=>({
       fit:el.scrollWidth<=el.clientWidth+1,
-      buttons:[el.querySelector('#ledgerTransfer'),el.querySelector('#ledgerAccount')].map(e=>e.getBoundingClientRect().height)
+      buttons:[...el.querySelectorAll('#ledgerTransfer, #ledgerAccount .cat-chip')].map(e=>e.getBoundingClientRect().height)
     }));
     assert(measured.fit&&measured.buttons.every(h=>h>=43.99),JSON.stringify({width,measured}));
   }
@@ -184,6 +208,7 @@ async function sync(page,direction){
   await p.evaluate(()=>setAmountPrivacy(true));
   assert.equal(await p.locator('#svTransferForm').count(),0);
   assert.equal(await p.locator('#ledgerTransfer').isDisabled(),true);
+  assert.equal(await unlinked.isDisabled(),true);
   assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
   pass('account picker and transfer shortcut fit small screens and respect amount privacy');
 })().catch(error=>{console.error(error);process.exitCode=1}).finally(async()=>{await browser?.close();server?.kill();});

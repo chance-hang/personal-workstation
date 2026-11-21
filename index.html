@@ -17,7 +17,7 @@
 <link rel="icon" href="./icons/icon.svg?v=20261118-c" type="image/svg+xml" sizes="any">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png?v=20261118-c" sizes="180x180">
 <link rel="manifest" href="./site.webmanifest?v=20261118-c">
-  <link rel="stylesheet" href="styles.css?v=review-linked-accounts-20261121-1">
+  <link rel="stylesheet" href="styles.css?v=review-linked-accounts-20261121-2">
 </head>
 <body>
 <div class="main-area" id="mainArea">
@@ -321,7 +321,10 @@
           </div>
           <div class="amt-input"><span class="y">¥</span><input id="amtIn" type="number" inputmode="decimal" placeholder="0.00"></div>
           <div class="cat-row" id="catRow"></div>
-          <div class="field ledger-account-field"><label class="lab" for="ledgerAccount" id="ledgerAccountLabel">扣账账户</label><select id="ledgerAccount" class="input-styled"><option value="">仅记账</option></select></div>
+          <fieldset class="ledger-account-field" id="ledgerAccount" aria-describedby="ledgerAccountHint">
+            <legend>扣款账户</legend>
+            <div class="ledger-account-choices"></div>
+          </fieldset>
           <p id="ledgerAccountHint" class="sv-hint" hidden></p>
           <div class="field"><span class="lab">备注</span><input id="ledgerNoteIn" placeholder="选填" maxlength="40"></div>
           <div class="quick-chips note-quick-row" id="noteQuickRow"></div>
@@ -726,6 +729,6 @@
 <div class="modal-mask" id="modalMask"><div class="modal" id="modalBox"></div></div>
 
 
-  <script src="app.js?v=review-linked-accounts-20261121-1"></script>
+  <script src="app.js?v=review-linked-accounts-20261121-2"></script>
 </body>
 </html>

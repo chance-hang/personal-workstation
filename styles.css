@@ -185,7 +185,19 @@ main{flex:1;padding:16px 16px calc(var(--tab-h) + 24px)}
 .money-head .seg button.on.exp{background:var(--expense);color:#fff}
 .money-head .seg button.on.inc{background:var(--income);color:#fff}
 .money-head #ledgerTransfer{flex:none;white-space:nowrap}
-.ledger-account-field select.input-styled{min-height:44px;min-width:0;flex:1;width:100%;appearance:auto;cursor:pointer}
+/* finesse · component: account choices · register=product · tokens: inherited */
+.ledger-account-field{min-inline-size:0;border:0;padding:0;margin:0 0 8px}
+.ledger-account-field legend{padding:0;margin-bottom:6px;color:var(--text-2);font-size:13px}
+.ledger-account-choices{display:flex;flex-wrap:wrap;gap:8px}
+.ledger-account-choice{position:relative;min-width:0;max-width:100%}
+.ledger-account-choice input{position:absolute;width:1px;height:1px;margin:0;clip-path:inset(50%)}
+.ledger-account-choice .cat-chip{display:block;min-height:44px;line-height:28px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:none}
+.ledger-account-choice input:checked+.cat-chip{background:var(--text);color:var(--card);border-color:var(--text)}
+.ledger-account-choice input:focus-visible+.cat-chip{outline:2px solid var(--text);outline-offset:2px}
+.ledger-account-choice input:disabled+.cat-chip{opacity:.5;cursor:not-allowed;transform:none}
+@media (hover:hover){
+  .ledger-account-choice input:not(:disabled)+.cat-chip:hover{border-color:var(--text)}
+}
 #ledgerAccountHint{margin:0 0 8px}
 .sv-credit-due{color:var(--expense)}
 .amt-input{display:flex;align-items:baseline;gap:4px;margin-bottom:12px}

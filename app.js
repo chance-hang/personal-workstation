@@ -3614,20 +3614,28 @@ let moneyOverviewRenderedDay='';
 const LEDGER_ACCOUNT_KEY='wb_ledger_account_choices_v1';
 let ledgerAccountChoices={};
 try{ledgerAccountChoices=JSON.parse(localStorage.getItem(LEDGER_ACCOUNT_KEY))||{};}catch(e){}
-function ledgerAccountOptions(type,selected='',previous=''){
+function renderLedgerAccountChoices(id,type,selected='',previous=''){
+  const field=$('#'+id);
   const accounts=svAccounts().filter(a=>(!a.archived||a.id===previous)&&(type==='expense'||!svIsCredit(a)));
-  return '<option value="">仅记账</option>'+svOptions(accounts,selected);
+  if(!accounts.some(a=>a.id===selected))selected='';
+  const choices=[{id:'',name:'仅记账'},...accounts];
+  field.querySelector('legend').textContent=type==='income'?'收款账户':'扣款账户';
+  field.querySelector('.ledger-account-choices').innerHTML=choices.map((a,i)=>{
+    const key=id+'-'+i;
+    const name=esc(svAccountOptionLabel(a));
+    return `<span class="ledger-account-choice"><input type="radio" name="${id}" id="${key}" value="${esc(a.id)}"${a.id===selected?' checked':''}><label class="cat-chip" for="${key}" title="${name}">${name}</label></span>`;
+  }).join('');
+  field.disabled=amountPrivacy;
+}
+function selectedLedgerAccount(id){
+  return $('#'+id+' input:checked')?.value||'';
 }
 function renderLedgerAccountChoice(){
-  const selected=ledgerAccountChoices[curType]||'';
-  const form=$('#ledgerAccount');
-  form.innerHTML=ledgerAccountOptions(curType,selected);
-  form.disabled=amountPrivacy;
-  $('#ledgerAccountLabel').textContent=curType==='income'?'收款账户':'扣账账户';
+  renderLedgerAccountChoices('ledgerAccount',curType,ledgerAccountChoices[curType]);
   updateLedgerAccountHint();
 }
 function updateLedgerAccountHint(){
-  const account=svAccounts().find(a=>a.id===$('#ledgerAccount').value),hint=$('#ledgerAccountHint');
+  const account=svAccounts().find(a=>a.id===selectedLedgerAccount('ledgerAccount')),hint=$('#ledgerAccountHint');
   hint.textContent=!amountPrivacy&&svIsCredit(account)?'这笔消费同时计入支出和信用卡欠款。':'';
   hint.hidden=!hint.textContent;
 }
@@ -3808,8 +3816,11 @@ function svPut(field,record){
   if(error)return error;
   S[field]=records;persist();renderLedgerAccountChoice();renderSavings();return '';
 }
+function svAccountOptionLabel(account){
+  return account.name+(svIsCredit(account)?' · 信用卡':'')+(account.archived?'（已停用）':'');
+}
 function svOptions(accounts,selected='',all=false){
-  return (all?'<option value="">全部账户</option>':'')+accounts.map(a=>`<option value="${esc(a.id)}"${a.id===selected?' selected':''}>${esc(a.name)}${svIsCredit(a)?' · 信用卡':''}${a.archived?'（已停用）':''}</option>`).join('');
+  return (all?'<option value="">全部账户</option>':'')+accounts.map(a=>`<option value="${esc(a.id)}"${a.id===selected?' selected':''}>${esc(svAccountOptionLabel(a))}</option>`).join('');
 }
 function svRefreshSelect(selector,accounts,all=false){
   const el=$(selector),selected=el.value;
@@ -4759,7 +4770,7 @@ function deleteCustomCat(type,name){
 }
 $('#dateIn').value=todayStr();
 $('#ledgerAccount').onchange=()=>{
-  ledgerAccountChoices[curType]=$('#ledgerAccount').value;
+  ledgerAccountChoices[curType]=selectedLedgerAccount('ledgerAccount');
   updateLedgerAccountHint();
 };
 $('#ledgerTransfer').onclick=svOpenQuickTransfer;
@@ -4768,7 +4779,7 @@ $('#amtSave').onclick=()=>{
   const a=parseFloat($('#amtIn').value);if(!a||a<=0){toast('请输入金额');return}
   const date=$('#dateIn').value;
   if(!timeValidDay(date)){toast('请选择有效的记账日期');return}
-  const accountId=$('#ledgerAccount').value;
+  const accountId=selectedLedgerAccount('ledgerAccount');
   const record={id:uid(),type:curType,amount:a,category:curCat,note:$('#ledgerNoteIn').value.trim(),date,updatedAt:timeEditTimestamp()};
   if(accountId)record.accountId=accountId;
   const error=ledgerPut(record);
@@ -8347,21 +8358,21 @@ function editLedgerById(id){
     <div class="field"><span class="lab">类型</span><select id="elType" class="input-styled"><option value="expense" ${x.type==='expense'?'selected':''}>支出</option><option value="income" ${x.type==='income'?'selected':''}>收入</option></select></div>
     <div class="field"><span class="lab">分类</span><select id="elCat" class="input-styled">${cats.map(c=>`<option value="${esc(c[0])}" ${c[0]===x.category?'selected':''}>${esc(c[0])}</option>`).join('')}</select></div>
     <div class="field"><span class="lab">金额</span><input type="number" id="elAmt" class="input-styled" value="${x.amount}"></div>
-    <div class="field ledger-account-field"><label class="lab" for="elAccount" id="elAccountLabel">${x.type==='income'?'收款账户':'扣账账户'}</label><select id="elAccount" class="input-styled">${ledgerAccountOptions(x.type,x.accountId,x.accountId)}</select></div>
+    <fieldset class="ledger-account-field" id="elAccount"><legend></legend><div class="ledger-account-choices"></div></fieldset>
     <div class="field"><span class="lab">备注</span><input id="elNote" class="input-styled" value="${esc(x.note||'')}"></div>
     <p class="sv-error" id="elError" role="alert"></p>
     <div class="btns"><button class="cancel" onclick="confirmClose(()=>{$('#elSave').click()})">关闭</button><button class="ok" id="elSave">保存</button></div>`,{noMaskClose:true});
+  renderLedgerAccountChoices('elAccount',x.type,x.accountId,x.accountId);
   $('#elType').onchange=()=>{
-    const type=$('#elType').value,selected=$('#elAccount').value;
+    const type=$('#elType').value,selected=selectedLedgerAccount('elAccount');
     $('#elCat').innerHTML=catsFor(type).map(c=>`<option value="${esc(c[0])}">${esc(c[0])}</option>`).join('');
-    $('#elAccount').innerHTML=ledgerAccountOptions(type,selected,x.accountId);
-    $('#elAccountLabel').textContent=type==='income'?'收款账户':'扣账账户';
+    renderLedgerAccountChoices('elAccount',type,selected,x.accountId);
   };
   $('#elSave').onclick=()=>{
     if(!requireVisibleAmounts('保存账目'))return;
     const current=S.ledger.find(row=>row.id===id);
     if(stableNote(current)!==snapshot){$('#elError').textContent='账单已在别处修改，请重新打开。';return;}
-    const date=$('#elDate').value,amount=parseFloat($('#elAmt').value),accountId=$('#elAccount').value;
+    const date=$('#elDate').value,amount=parseFloat($('#elAmt').value),accountId=selectedLedgerAccount('elAccount');
     if(!timeValidDay(date)||!Number.isFinite(amount)){$('#elError').textContent='请核对记账日期和金额。';return;}
     const next={...current,date,amount,type:$('#elType').value,category:$('#elCat').value,note:$('#elNote').value.trim(),updatedAt:timeEditTimestamp(current)};
     if(accountId)next.accountId=accountId;else delete next.accountId;
