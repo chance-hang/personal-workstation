@@ -184,9 +184,13 @@ main{flex:1;padding:16px 16px calc(var(--tab-h) + 24px)}
 .money-head .seg button{flex:1;padding:8px;border-radius:var(--r-xs);font-size:13px;font-weight:600;color:var(--text-2);transition:all .15s}
 .money-head .seg button.on.exp{background:var(--expense);color:#fff}
 .money-head .seg button.on.inc{background:var(--income);color:#fff}
+.money-head #ledgerTransfer{flex:none;white-space:nowrap}
+.ledger-account-field select.input-styled{min-height:44px;min-width:0;flex:1;width:100%;appearance:auto;cursor:pointer}
+#ledgerAccountHint{margin:0 0 8px}
+.sv-credit-due{color:var(--expense)}
 .amt-input{display:flex;align-items:baseline;gap:4px;margin-bottom:12px}
 .amt-input .y{font-size:26px;font-weight:700;color:var(--text)}
-.amt-input input{flex:1;border:none;border-bottom:1.5px solid var(--line);font-size:28px;font-weight:700;padding:6px 0;outline:none;background:transparent;transition:border .15s}
+.amt-input input{flex:1;min-width:0;border:none;border-bottom:1.5px solid var(--line);font-size:28px;font-weight:700;padding:6px 0;outline:none;background:transparent;transition:border .15s}
 .amt-input input:focus{border-color:var(--text)}
 .cat-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .cat-chip{padding:7px 13px;border-radius:99px;background:var(--card-soft);border:1px solid var(--line);font-size:13px;display:flex;align-items:center;gap:6px;transition:all .15s;cursor:pointer}

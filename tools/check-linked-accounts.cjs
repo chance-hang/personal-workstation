@@ -1,0 +1,189 @@
+/* Account linkage and sync in isolated synthetic browser sessions. */
+const assert=require('node:assert/strict');
+const {spawn}=require('node:child_process');
+const {once}=require('node:events');
+const {chromium}=require('playwright');
+const origin='http://127.0.0.1:4238';
+const errors=[],external=[];
+let browser,server;
+const pass=label=>console.log('PASS '+label);
+const view=(p,id)=>p.evaluate(id=>{goTab('money');setMoneyView(id)},id);
+const money=async(p,id)=>p.evaluate(id=>svBalance(svAccounts().find(a=>a.id===id)),id);
+const wealth=p=>p.evaluate(()=>svWealth());
+const save=(p,id)=>p.locator('#'+id+' button[type=submit]').click();
+const totals=p=>p.evaluate(()=>({month:monthSum('2026-11'),budget:budgetExpOf('2026-11'),rows:S.ledger.length}));
+
+async function open(width=1280){
+  const context=await browser.newContext({viewport:{width,height:950},timezoneId:'Asia/Shanghai',reducedMotion:'reduce'});
+  await context.addInitScript(()=>localStorage.setItem('wb_sidebar_open','0'));
+  await context.route('**/*',route=>{
+    if(new URL(route.request().url()).origin===origin)return route.continue();
+    external.push(route.request().url());return route.abort();
+  });
+  const page=await context.newPage();
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.clock.setFixedTime(new Date('2026-11-21T05:00:00Z'));
+  await page.goto(origin+'/?mockSync=1');
+  await page.waitForFunction(()=>syncActive()&&!syncBusy);
+  return page;
+}
+async function addBill(page,type,account,amount,note,date='2026-11-21'){
+  await page.locator('.money-head [data-t="'+type+'"]').click();
+  await page.locator('#ledgerAccount').selectOption(account);
+  await page.locator('#amtIn').fill(String(amount));
+  await page.locator('#ledgerNoteIn').fill(note);
+  await page.locator('#dateIn').fill(date);
+  await page.locator('#amtSave').click();
+}
+async function sync(page,direction){
+  await page.waitForFunction(()=>!syncBusy);
+  await page.evaluate(async direction=>{
+    clearTimeout(syncTimer);
+    if(direction==='push')await cloudPush();else await cloudPull();
+    clearTimeout(syncTimer);
+  },direction);
+}
+
+(async()=>{
+  server=spawn(process.execPath,['tools/mock-sync-server.mjs'],{
+    env:{...process.env,PORT:'4238',MOCK_PREVIEW_ONLY:'1',MOCK_BIND_HOST:'127.0.0.1'},
+    stdio:['ignore','pipe','inherit'],windowsHide:true
+  });
+  const [ready]=await once(server.stdout,'data',{signal:AbortSignal.timeout(8000)});
+  assert.match(String(ready),/LOCAL_MOCK_SERVER_READY/);
+  browser=await chromium.launch({executablePath:process.env.SAVINGS_BROWSER});
+  const p=await open();
+  await p.evaluate(()=>{
+    clearTimeout(syncTimer);S=structuredClone(DEFAULT);
+    S.ledger=[{id:'old-bill',date:'2026-11-02',type:'expense',category:'餐饮',amount:80,note:'原账未关联'}];
+    S.budget=4200;
+    S.savingsAccounts=[
+      {id:'bank',name:'虚拟工资卡',openingDate:'2026-11-01',openingCents:500000},
+      {id:'wallet',name:'虚拟钱包',openingDate:'2026-11-01',openingCents:100000},
+      {id:'pocket',name:'虚拟小荷包',openingDate:'2026-11-01',openingCents:200000}
+    ];
+    renderAll();
+  });
+  await view(p,'savings');await p.locator('#svAddAccount').click();
+  await p.locator('#svAccountName').fill('虚拟信用卡');
+  await p.locator('#svAccountKind').selectOption('credit');
+  await p.locator('#svOpeningAmount').fill('300');
+  await p.locator('#svOpeningDate').fill('2026-11-01');
+  await save(p,'svAccountForm');
+  const card=await p.evaluate(()=>svAccounts().find(svIsCredit).id);
+  assert.equal(await money(p,'wallet'),100000);
+  assert.equal(await money(p,card),-30000);
+  assert.deepEqual(await wealth(p),{deposit:800000,other:0,debt:30000,total:800000,net:770000});
+  assert.equal(await p.evaluate(()=>Object.hasOwn(S.ledger[0],'accountId')),false);
+  await p.evaluate(()=>{
+    S.savingsPositions=[{id:'duplicate',kind:'liability',name:'旧信用卡欠款',amountCents:30000}];
+    renderSavings();
+  });
+  assert.equal((await wealth(p)).debt,60000);
+  await p.locator('[data-position-edit=duplicate]').click();
+  await p.locator('#svPositionKind').selectOption('linked');
+  await p.locator('#svPositionAccount').selectOption(card);
+  await save(p,'svPositionForm');
+  assert.equal((await wealth(p)).debt,30000);
+  assert.deepEqual(await p.evaluate(()=>[S.savingsPositions[0].kind,S.savingsPositions[0].amountCents]),['linked',30000]);
+  pass('legacy ledger and balances stay intact; credit debt is a liability and an explicitly linked old debt is not counted twice');
+
+  await view(p,'entry');
+  await addBill(p,'expense','wallet',120,'虚拟钱包支出');
+  assert.equal(await money(p,'wallet'),88000);
+  await addBill(p,'expense',card,150,'虚拟信用消费');
+  assert.equal(await money(p,card),-45000);
+  assert.match(await p.locator('#ledgerAccountHint').textContent(),/信用卡欠款/);
+  await addBill(p,'income','bank',2000,'虚拟入账');
+  assert.equal(await money(p,'bank'),700000);
+  assert.equal(await p.locator('#ledgerAccount option[value="'+card+'"]').count(),0);
+  await p.locator('.money-head [data-t=expense]').click();
+  assert.equal(await p.locator('#ledgerAccount').inputValue(),card);
+  await p.locator('.money-head [data-t=income]').click();
+  assert.equal(await p.locator('#ledgerAccount').inputValue(),'bank');
+  assert.deepEqual(await totals(p),{month:{inc:2000,exp:350},budget:350,rows:4});
+  pass('income and expenses update selected accounts, preserve budget logic, and remember separate choices');
+
+  const prior=await wealth(p),before=await totals(p);
+  await p.locator('#ledgerTransfer').click();
+  await p.locator('#svEditAccount').selectOption('bank');
+  await p.locator('#svEditTo').selectOption(card);
+  await p.locator('#svEditAmount').fill('200');
+  await save(p,'svTransferForm');
+  assert.equal(await money(p,'bank'),680000);
+  assert.equal(await money(p,card),-25000);
+  const repaid=await wealth(p);
+  assert.equal(repaid.net,prior.net);
+  assert.equal(prior.total-repaid.total,20000);
+  assert.equal(prior.debt-repaid.debt,20000);
+  assert.deepEqual(await totals(p),before);
+  await view(p,'savings');
+  await p.locator('#svFilterAccount').selectOption(card);
+  assert.match(await p.locator('#svFlows').textContent(),/信用卡还款/);
+  assert.match(await p.locator('#svFlows').textContent(),/账本支出/);
+  assert.match(await p.locator('#svCreditDebts').textContent(),/250/);
+  pass('repayment reduces both balances while preserving net worth and ledger spending; account activity shows both movements');
+
+  await p.locator('#fmSetPocket').click();
+  assert.equal(await p.locator('#fmPocketAccount option[value="'+card+'"]').count(),0);
+  await p.locator('#fmPocketAccount').selectOption('pocket');
+  await p.locator('#fmOpeningPending').fill('100');
+  await save(p,'fmEditForm');
+  await view(p,'entry');await p.locator('#ledgerTransfer').click();await p.locator('#svQuickPocket').click();
+  await p.locator('#fmEntryOther').selectOption('bank');
+  await p.locator('#fmEntryAmount').fill('800');
+  await p.locator('#fmEntryRepay').fill('100');
+  await save(p,'fmEditForm');
+  assert.deepEqual(await p.evaluate(()=>fmPocketMetrics()),{pending:0,monthly:80000,yearly:80000});
+  assert.equal(await money(p,'pocket'),290000);
+  assert.deepEqual(await totals(p),before);
+  await view(p,'savings');await p.locator('#svFilterAccount').selectOption('pocket');
+  assert.match(await p.locator('#svStats').textContent(),/新增存钱¥800/);
+  assert.match(await p.locator('#svStats').textContent(),/已补回¥100/);
+  await p.locator('#svMode').selectOption('year');
+  const november=p.locator('#svMonths tr').filter({hasText:'11月'});
+  assert.deepEqual(await november.locator('td').allTextContents(),['¥800','¥0','¥100','¥2,900']);
+  pass('the same pocket transfer records new savings and repayment, and monthly and annual statistics exclude repayment from progress');
+
+  await view(p,'entry');await addBill(p,'expense','wallet',999,'不应保存');
+  assert.match(await p.locator('#toast').textContent(),/余额不足/);
+  await addBill(p,'expense','wallet',1,'不应保存','2026-10-30');
+  assert.match(await p.locator('#toast').textContent(),/起始日/);
+  assert.deepEqual(await totals(p),before);
+  const bill=await p.evaluate(()=>S.ledger.find(e=>e.note==='虚拟信用消费'));
+  await sync(p,'push');
+  const other=await open(390);
+  assert.equal(await money(other,card),-25000);
+  await other.evaluate(id=>editLedgerById(id),bill.id);
+  await other.locator('#elAmt').fill('180');
+  await other.locator('#elSave').click();
+  assert.equal(await money(other,card),-28000);
+  await sync(other,'push');await sync(p,'pull');
+  assert.equal(await money(p,card),-28000);
+  await other.evaluate(()=>goTab('history'));
+  other.once('dialog',d=>d.accept());
+  await other.locator('.hist-row[data-hid="'+bill.id+'"] .hr-del').click();
+  assert.equal(await money(other,card),-10000);
+  await sync(other,'push');await sync(p,'pull');
+  assert.equal(await money(p,card),-10000);
+  await p.evaluate(old=>mergeData({ledger:[old]}),bill);
+  assert.equal(await p.evaluate(id=>S.ledger.some(row=>row.id===id),bill.id),false);
+  assert.equal(await money(p,card),-10000);
+  pass('invalid cash movements stay out, and linked edits and deletions propagate across Mock devices without stale revival');
+
+  await view(p,'entry');
+  for(const width of [320,375,414,768]){
+    await p.setViewportSize({width,height:950});
+    const measured=await p.locator('#moneyFormSec').evaluate(el=>({
+      fit:el.scrollWidth<=el.clientWidth+1,
+      buttons:[el.querySelector('#ledgerTransfer'),el.querySelector('#ledgerAccount')].map(e=>e.getBoundingClientRect().height)
+    }));
+    assert(measured.fit&&measured.buttons.every(h=>h>=43.99),JSON.stringify({width,measured}));
+  }
+  await p.locator('#ledgerTransfer').click();
+  await p.evaluate(()=>setAmountPrivacy(true));
+  assert.equal(await p.locator('#svTransferForm').count(),0);
+  assert.equal(await p.locator('#ledgerTransfer').isDisabled(),true);
+  assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
+  pass('account picker and transfer shortcut fit small screens and respect amount privacy');
+})().catch(error=>{console.error(error);process.exitCode=1}).finally(async()=>{await browser?.close();server?.kill();});
