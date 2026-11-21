@@ -1026,7 +1026,9 @@ details[data-fold-part] > summary{min-height:44px;align-content:center}
 .ln-item .ln-title{font-size:14px;font-weight:600}
 .ln-item .ln-sub{font-size:12px;color:var(--text-3);margin-top:3px;line-height:1.5}
 .ln-item .ln-acts{display:flex;gap:6px;flex:none}
-.ln-item .ln-acts button{border:1px solid var(--line);background:var(--card);border-radius:var(--r-sm);padding:5px 9px;font-size:12px;color:var(--text-2)}
+.ln-item .ln-acts button:not(.row-action){border:1px solid var(--line);background:var(--card);border-radius:var(--r-sm);padding:5px 9px;font-size:12px;color:var(--text-2);white-space:nowrap}
+.ln-item:has(.row-action) .ln-main{overflow-wrap:anywhere}
+.ln-item .ln-acts:has(.row-action){align-items:center;gap:2px}
 .ln-caret{display:inline-block;width:16px;flex:none;color:var(--text-2);cursor:pointer;user-select:none;font-size:12px}
 .ln-caret:hover{color:var(--text)}
 .ln-caret-ph{display:inline-block;width:16px;flex:none}
@@ -1065,13 +1067,13 @@ details[data-fold-part] > summary{min-height:44px;align-content:center}
 .ln-tree-child{margin-left:40px;padding:3px 14px 3px 10px;border-left:3px solid var(--line-soft);background:var(--card-soft)}
 .ln-tree-child .ln-title{font-size:12.5px !important;font-weight:500;line-height:1.25}
 .ln-tree-child .ln-sub{font-size:11px !important;line-height:1.3;margin-top:1px}
-.ln-tree-child .ln-acts button{padding:2px 6px;font-size:10.5px}
+.ln-tree-child .ln-acts button:not(.row-action){padding:2px 6px;font-size:10.5px}
 /* v3.20.14: 资料子项——padding-right=16px 与主级对齐（删除按钮右边齐），左边框加深为 3px #b9a88c 与资料类主题色对应 */
 /* v3.20.22: 同上——padding 收紧、margin-left 32→40 */
 .ln-res-child{margin-left:40px;padding:3px 14px 3px 10px;border-left:3px solid #b9a88c;background:rgba(185,168,140,.05)}
 .ln-res-child .ln-title{font-size:12.5px !important;font-weight:500;line-height:1.25}
 .ln-res-child .ln-sub{font-size:11px !important;line-height:1.3;margin-top:1px}
-.ln-res-child .ln-acts button{padding:2px 6px;font-size:10.5px}
+.ln-res-child .ln-acts button:not(.row-action){padding:2px 6px;font-size:10.5px}
 /* v3.20.14: 大纲 tab 任务行（子级）紧凑 + 左边框 + padding-right 12 让文本行尾与父容器右内边对齐 */
 .ln-task-child{padding:1px 12px 1px 12px;font-size:12px;border-left:2px solid var(--line-soft);margin-left:12px;line-height:1.4;background:var(--card-soft)}
 .ln-task-child .ln-task-t{font-size:12px !important}
@@ -1133,8 +1135,7 @@ details[data-fold-part] > summary{min-height:44px;align-content:center}
 .ln-detail-head{display:flex;align-items:center;gap:8px;padding:6px 2px 2px}
 .ln-detail-head .ln-dot{width:12px;height:12px;border-radius:50%;flex:none;margin-top:0}
 .ln-detail-t{flex:1;min-width:0;font-size:15px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ln-detail-acts{display:flex;gap:6px;flex:none}
-.ln-detail-acts button{border:1px solid var(--line);background:var(--card);border-radius:var(--r-sm);padding:5px 9px;font-size:12px;color:var(--text-2)}
+.ln-direction-head .ln-detail-t b{display:block;overflow:hidden;text-overflow:ellipsis}
 .ln-back{border:1px solid var(--line);background:var(--card);border-radius:var(--r-sm);padding:5px 11px;font-size:13px;color:var(--text-2);flex:none}
 .ln-dir-section{padding-top:8px}
 /* v3.20.21: 内容 tab 按阶段分组的区块与头部——沿用 renderLnNodeView 的强关联视觉（色左边框 + 圆点 + 面包屑） */
@@ -1551,9 +1552,11 @@ details[data-fold-part] > summary{min-height:44px;align-content:center}
 .sv-hint{margin:var(--ui-space-2) 0;overflow-wrap:anywhere}
 .sv-number{font-variant-numeric:tabular-nums;overflow-wrap:anywhere;min-width:0}
 .sv-account-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--ui-space-2);padding:var(--ui-space-3) 0;border-top:1px solid var(--line)}
+.sv-account-row:has(.row-actions){align-items:center;padding-block:var(--ui-space-2)}
+.sv-account-with-actions,.sv-flow-head{grid-template-columns:minmax(0,1fr) auto auto}
+.sv-account-with-actions>.sv-number,.sv-flow-head>.sv-number{text-align:right;max-inline-size:clamp(5.25rem,25vw,13rem)}
 .sv-account-main{min-width:0;display:flex;flex-direction:column;font-size:var(--ui-font-body);overflow-wrap:anywhere}
 .sv-account-main span{color:var(--text-2);font-size:var(--ui-font-caption)}
-.sv-account-row>.sv-actions{grid-column:1 / -1;justify-content:flex-end}
 .sv-actions{display:flex;gap:var(--ui-space-2);flex-wrap:wrap}
 .sv-button{display:inline-flex;align-items:center;justify-content:center;min-height:var(--ui-hit-size);min-width:var(--ui-hit-size);padding:var(--ui-space-2) var(--ui-space-3);border:1px solid var(--line);border-radius:var(--ui-control-radius);background:var(--card);font-size:var(--ui-font-control);color:var(--text);white-space:nowrap;transition:none}
 .sv-button.sv-primary{background:var(--text);color:var(--card);border-color:var(--text)}
@@ -1585,9 +1588,8 @@ details[data-fold-part] > summary{min-height:44px;align-content:center}
 .sv-rules{font-size:var(--ui-font-caption);color:var(--text-2);line-height:1.7}
 .sv-rules summary{min-height:var(--ui-hit-size);padding-block:var(--ui-space-3);cursor:pointer}
 .sv-flow{border-top:1px solid var(--line);padding-block:var(--ui-space-3);font-size:var(--ui-font-body);overflow-wrap:anywhere}
-.sv-flow-head{display:flex;justify-content:space-between;gap:var(--ui-space-3);flex-wrap:wrap}
+.sv-flow-head{display:grid;align-items:center;gap:var(--ui-space-2)}
 .sv-flow p{margin:var(--ui-space-1) 0}
-.sv-flow .sv-actions{justify-content:flex-end}
 .sv-pagination{display:flex;align-items:center;justify-content:center;gap:var(--ui-space-2);margin-top:var(--ui-space-3);font-size:var(--ui-font-small)}
 @media(max-width:480px){
   .sv-form,.sv-query{grid-template-columns:minmax(0,1fr)}
@@ -1650,6 +1652,19 @@ details[data-fold-part] > summary{min-height:44px;align-content:center}
 .fm-value-row :is(b,strong){flex:none;font-variant-numeric:tabular-nums}
 .fm-value-row small,.fm-list-row small{display:block;color:var(--text-2);font-size:var(--ui-font-caption)}
 .fm-list-row button{flex:none}
+
+/* finesse · component: row actions · register=product · tokens: inherited */
+.row-actions{display:flex;align-items:center;justify-content:flex-end;gap:2px;flex:none}
+.row-action{display:inline-grid;place-items:center;flex:none;inline-size:var(--ui-hit-size);block-size:var(--ui-hit-size);padding:0;border:1px solid transparent;border-radius:var(--r-sm);color:var(--text-2);background:transparent;cursor:pointer}
+.row-action svg{width:17px;height:17px;pointer-events:none}
+.row-action--disable,.row-action--delete{color:var(--bad)}
+.row-action--enable{color:var(--ok)}
+.row-action:focus-visible{outline:2px solid var(--text);outline-offset:1px}
+.row-action:active:not(:disabled){background:var(--card-hover);border-color:var(--line)}
+.row-action:disabled{opacity:.5;cursor:not-allowed}
+@media(hover:hover){
+  .row-action:hover:not(:disabled){background:var(--card-soft);border-color:var(--line)}
+}
 .fm-summary{padding:4px 12px;background:var(--card-soft);border-radius:var(--r-sm)}
 .fm-summary .fm-total{border-bottom:0;font-weight:700}
 .fm-total strong{font-size:1.15rem}

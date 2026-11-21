@@ -193,7 +193,7 @@ async function sync(page,direction){
   await unlinked.press('ArrowRight');
   assert.equal(await checkedAccount(p),'bank');
   await p.evaluate(()=>{
-    S.savingsAccounts.push({id:'long-name',name:'很长的虚拟扣款账户名称用来验证手机屏幕空间'.repeat(3)});
+    S.savingsAccounts.push({id:'long-name',name:'很长的虚拟扣款账户名称用来验证手机屏幕空间'.repeat(3),openingDate:'2026-11-01',openingCents:0});
     renderMoney();
   });
   for(const width of [320,375,414,768]){
@@ -209,6 +209,67 @@ async function sync(page,direction){
   assert.equal(await p.locator('#svTransferForm').count(),0);
   assert.equal(await p.locator('#ledgerTransfer').isDisabled(),true);
   assert.equal(await unlinked.isDisabled(),true);
-  assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
   pass('account picker and transfer shortcut fit small screens and respect amount privacy');
+
+  await p.evaluate(()=>{
+    setAmountPrivacy(false);
+    S.savingsPayroll.pocketId='pocket';
+    S.savingsPayroll.directions=[{id:'daily',name:'日常开支',saving:false}];
+    S.savingsPayroll.rules=[{id:'daily-rule',target:'daily',method:'fixed',value:200,cond:'always'}];
+    const learning=lnData();
+    learning.directions=[{id:'compact-dir',name:'一个有较长名称的虚拟方向',active:true}];
+    learning.questions=[{id:'compact-question',directionId:'compact-dir',title:'模拟问题',status:'solved',answer:'已记录答案'}];
+    renderSavings();
+  });
+  await p.setViewportSize({width:320,height:950});
+  await view(p,'savings');
+  const wallet=p.locator('#svAccounts .sv-account-row').filter({hasText:'虚拟钱包'});
+  const edit=wallet.getByRole('button',{name:'编辑',exact:true});
+  const turnOff=wallet.getByRole('button',{name:'停用',exact:true});
+  const positions=await Promise.all([edit.boundingBox(),turnOff.boundingBox()]);
+  assert(positions.every(box=>box&&box.width>=43.99&&box.height>=43.99));
+  assert.equal(positions[0].y,positions[1].y);
+  assert.equal(await wallet.evaluate(row=>row.scrollWidth<=row.clientWidth+1),true);
+  assert.equal(await wallet.locator('strong').evaluate(amount=>amount.parentElement.getBoundingClientRect().height<=70),true);
+  await edit.click();
+  assert.equal(await p.locator('#svAccountName').inputValue(),'虚拟钱包');
+  await p.locator('#svDialogCancel').click();
+  const oldBalance=await money(p,'wallet');
+  await turnOff.click();
+  assert.match(await wallet.textContent(),/已停用/);
+  assert.equal(await accountChoice(p,'wallet').count(),0);
+  assert.equal(await money(p,'wallet'),oldBalance);
+  await wallet.getByRole('button',{name:'启用',exact:true}).click();
+  assert.equal(await accountChoice(p,'wallet').count(),1);
+
+  await p.evaluate(()=>{
+    $('#svAllocationPlan').open=true;
+    $('#fmRulePanel').open=true;
+  });
+  await p.locator('#fmRules').getByRole('button',{name:'编辑',exact:true}).click();
+  assert.equal(await p.locator('#fmRuleValue').inputValue(),'200');
+  await p.locator('#svDialogCancel').click();
+  await p.locator('#svFilterAccount').selectOption('');
+  assert.equal(await p.locator('#svFlows').getByRole('button',{name:'编辑账单',exact:true}).count()>0,true);
+
+  await p.evaluate(()=>{goTab('learning');lnOpenDir('compact-dir');});
+  const learningHead=p.locator('.ln-direction-head');
+  await learningHead.getByRole('button',{name:'停用',exact:true}).click();
+  assert.match(await learningHead.textContent(),/已停用/);
+  await learningHead.getByRole('button',{name:'启用',exact:true}).click();
+  await learningHead.getByRole('button',{name:'编辑',exact:true}).click();
+  assert.equal(await p.locator('#lnDirName').inputValue(),'一个有较长名称的虚拟方向');
+  await p.evaluate(()=>closeModal());
+  await p.locator('.ln-group-tab[data-g=knowledge]').click();
+  const question=p.locator('.ln-item').filter({hasText:'模拟问题'});
+  await question.getByRole('button',{name:'编辑',exact:true}).click();
+  assert.equal(await p.locator('#modalBox h4').textContent().then(text=>text.includes('编辑问题')),true);
+  await p.evaluate(()=>closeModal());
+  await question.getByRole('button',{name:'删除',exact:true}).click();
+  assert.equal(await p.locator('#lnCfm').isVisible(),true);
+  await p.locator('#modalBox').getByRole('button',{name:'取消',exact:true}).click();
+  assert.equal(await question.count(),1);
+  assert.equal(await learningHead.evaluate(row=>row.scrollWidth<=row.clientWidth+1),true);
+  pass('compact account and learning controls fit one row at 320px; edit, suspend, enable and delete confirmation still work');
+  assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
 })().catch(error=>{console.error(error);process.exitCode=1}).finally(async()=>{await browser?.close();server?.kill();});

@@ -3093,6 +3093,16 @@ const CATICON={
   refresh:'<path d="M4 12a8 8 0 0 1 14-5M20 12a8 8 0 0 1-14 5"/><path d="M20 4v4h-4M4 20v-4h4"/>'
 };
 function catIcon(name){return `<svg class="cat-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${CATICON[name]||CATICON.tag}</svg>`}
+const ROW_ACTIONS={
+  edit:['编辑','<path d="m14 5 5 5M4 20l1.5-6L16 3.5a2.1 2.1 0 0 1 3 0l1.5 1.5a2.1 2.1 0 0 1 0 3L10 18.5 4 20Z"/>'],
+  disable:['停用','<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>'],
+  enable:['启用','<circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/>'],
+  delete:['删除','<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5m4-5v5"/>']
+};
+function rowActionButton(action,attribute,value,label=ROW_ACTIONS[action][0]){
+  const name=esc(label);
+  return `<button type="button" class="row-action row-action--${action}" aria-label="${name}" title="${name}" ${attribute}="${esc(value)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ROW_ACTIONS[action][1]}</svg></button>`;
+}
 /* 自定义分类：存于 S.customCats = {expense:[{name,color}], income:[...]} */
 const CAT_PALETTE=['#c4756b','#c4a062','#9a86b8','#6a8db5','#c47a9e','#6ab58a','#5fa0b0','#7a82c4','#888888'];
 function customCats(type){return (S.customCats&&Array.isArray(S.customCats[type]))?S.customCats[type]:[]}
@@ -3967,7 +3977,11 @@ function svRenderAccounts(){
   $('#svAccounts').innerHTML=accounts.length?accounts.map(a=>{
     const balance=svBalance(a)||0,credit=svIsCredit(a);
     const label=credit?(balance>0?'预存 ':'应还 '):'';
-    return `<div class="sv-account-row"><div class="sv-account-main"><b>${esc(a.name)}</b><span>${a.archived?'已停用 · ':''}${credit?'信用卡 · ':''}${esc(a.openingDate)} 起记录</span></div><strong class="sv-number${credit&&balance<0?' sv-credit-due':''}">${label}${svMoney(credit?Math.abs(balance):balance)}</strong><div class="sv-actions"><button type="button" class="sv-button" data-sv-account="${esc(a.id)}">编辑</button><button type="button" class="sv-button" data-sv-toggle="${esc(a.id)}">${a.archived?'启用':'停用'}</button></div></div>`;
+    return `<div class="sv-account-row sv-account-with-actions">
+      <div class="sv-account-main"><b>${esc(a.name)}</b><span>${a.archived?'已停用 · ':''}${credit?'信用卡 · ':''}${esc(a.openingDate)} 起</span></div>
+      <strong class="sv-number${credit&&balance<0?' sv-credit-due':''}">${label}${svMoney(credit?Math.abs(balance):balance)}</strong>
+      <div class="row-actions">${rowActionButton('edit','data-sv-account',a.id)}${rowActionButton(a.archived?'enable':'disable','data-sv-toggle',a.id)}</div>
+    </div>`;
   }).join(''):'<p class="sv-empty">添加银行卡、钱包或信用卡，即可在记账时选择对应账户。</p>';
   $$('#svAccounts [data-sv-account]').forEach(b=>b.onclick=()=>svOpenAccount(b.dataset.svAccount));
   $$('#svAccounts [data-sv-toggle]').forEach(b=>b.onclick=()=>svToggleAccount(b.dataset.svToggle));
@@ -4033,9 +4047,13 @@ function svRenderFlows(){
     const type=e.kind==='transfer'&&svIsCredit(accounts.get(e.toAccountId))?'信用卡还款':{deposit:'存入',withdraw:'取出',transfer:'互转',income:'账本收入',expense:'账本支出'}[e.kind],from=accounts.get(e.accountId)?.name||'账户缺失';
     const tag=e.payrollTag;
     const pocketNote=tag?.kind==='emergency'?'应急取用 · 待补回':tag?.kind==='funding'?'新增 '+svMoney(e.amountCents-tag.repayCents)+' · 补回 '+svMoney(tag.repayCents):'';
-    const actions=e.fromLedger?'<button type="button" class="sv-button" data-sv-bill="'+esc(e.id)+'">编辑账单</button>':
-      '<button type="button" class="sv-button" data-sv-edit="'+esc(e.id)+'">编辑</button><button type="button" class="sv-button" data-sv-delete="'+esc(e.id)+'">删除</button>';
-    return `<article class="sv-flow"><div class="sv-flow-head"><b>${type}</b><strong class="sv-number">${svMoney(e.amountCents)}</strong></div><p>${esc(from)}${e.kind==='transfer'?' → '+esc(accounts.get(e.toAccountId)?.name||'账户缺失'):''}</p><p class="sv-hint">${esc(e.date)}${e.note?' · '+esc(ledgerNoteDisplay(e.note)):''}</p>${pocketNote?'<p class="sv-hint">'+pocketNote+'</p>':''}<div class="sv-actions">${actions}</div></article>`;
+    const actions=e.fromLedger?rowActionButton('edit','data-sv-bill',e.id,'编辑账单'):
+      rowActionButton('edit','data-sv-edit',e.id)+rowActionButton('delete','data-sv-delete',e.id);
+    return `<article class="sv-flow">
+      <div class="sv-flow-head"><b>${type}</b><strong class="sv-number">${svMoney(e.amountCents)}</strong><div class="row-actions">${actions}</div></div>
+      <p>${esc(from)}${e.kind==='transfer'?' → '+esc(accounts.get(e.toAccountId)?.name||'账户缺失'):''}</p>
+      <p class="sv-hint">${esc(e.date)}${e.note?' · '+esc(ledgerNoteDisplay(e.note)):''}</p>${pocketNote?'<p class="sv-hint">'+pocketNote+'</p>':''}
+    </article>`;
   }).join('')||'<p class="sv-empty">当前条件下没有流水。可切换期间、账户或筛选条件。</p>';
   $$('#svFlows [data-sv-edit]').forEach(b=>b.onclick=()=>svEditEntry(b.dataset.svEdit));
   $$('#svFlows [data-sv-delete]').forEach(b=>b.onclick=()=>svDeleteEntry(b.dataset.svDelete));
@@ -4175,7 +4193,8 @@ function svRenderWealth(){
     const rows=positions.filter(x=>kind==='linked'?['linked','ignored'].includes(x.kind):x.kind===kind);
     $('#'+id).innerHTML=rows.map(record=>{
       const label=record.kind==='linked'?'已关联 '+(svAccounts().find(x=>x.id===record.accountId)?.name||'账户待核对'):record.kind==='ignored'?'暂不计入':svMoney(record.amountCents);
-      return '<article class="sv-account-row"><div class="sv-account-main"><b>'+esc(maskMoneyText(record.name))+'</b><span>'+esc(label)+'</span></div><div class="sv-actions"><button class="sv-button" type="button" data-position-edit="'+esc(record.id)+'">编辑</button><button class="sv-button" type="button" data-position-delete="'+esc(record.id)+'">移除</button></div></article>';
+      return `<article class="sv-account-row"><div class="sv-account-main"><b>${esc(maskMoneyText(record.name))}</b><span>${esc(label)}</span></div>
+        <div class="row-actions">${rowActionButton('edit','data-position-edit',record.id)}${rowActionButton('delete','data-position-delete',record.id,'移除')}</div></article>`;
     }).join('')||'<p class="sv-empty">'+(kind==='liability'?'暂无其他负债':'暂无记录')+'</p>';
   }
   $('#svCreditDebts').innerHTML=svAccounts().map(account=>{
@@ -4584,9 +4603,9 @@ function fmRenderRules(settings){
   $('#fmRules').innerHTML=amountPrivacy?'<p class="sv-hint">金额隐私开启时隐藏分配规则</p>':ordered.map(r=>{
     const amount=r.method==='fixed'?money(Number(r.value)||0):r.method==='percent'?esc(r.value)+'%':'全部剩余';
     const detail=r.cond&&r.cond!=='always'?' · 工资'+(FM_CONDITIONS[r.cond]||'门槛')+money(Number(r.threshold)||0):'';
-    return '<div class="fm-list-row"><div><b>'+esc(names.get(r.target)||'方向缺失')+'</b><small>'+amount+detail+(r.enabled===false?' · 已停用':'')+'</small></div><button class="sv-button" type="button" data-fm-rule="'+esc(r.id)+'">编辑</button></div>';
+    return `<div class="fm-list-row"><div><b>${esc(names.get(r.target)||'方向缺失')}</b><small>${amount}${detail}${r.enabled===false?' · 已停用':''}</small></div>${rowActionButton('edit','data-fm-rule',r.id)}</div>`;
   }).join('')||'<p class="sv-hint">还没有分配规则。</p>';
-  $('#fmDirs').innerHTML=amountPrivacy?'':directions.map(d=>'<div class="fm-list-row"><div><b>'+esc(d.name)+'</b><small>'+(d.saving?'计入小荷包目标':'仅参与工资分配')+'</small></div><button class="sv-button" type="button" data-fm-direction="'+esc(d.id)+'">编辑</button></div>').join('');
+  $('#fmDirs').innerHTML=amountPrivacy?'':directions.map(d=>`<div class="fm-list-row"><div><b>${esc(d.name)}</b><small>${d.saving?'计入小荷包目标':'仅参与工资分配'}</small></div>${rowActionButton('edit','data-fm-direction',d.id)}</div>`).join('');
   $$('[data-fm-rule]').forEach(button=>button.onclick=()=>fmRuleDialog(button.dataset.fmRule));
   $$('[data-fm-direction]').forEach(button=>button.onclick=()=>fmDirectionDialog(button.dataset.fmDirection));
 }
@@ -8917,6 +8936,9 @@ function renderLnHomeCard(d,L0){
 }
 function lnOpenDir(id){lnCurrentDir=id;lnDetailTab='plans';renderLearning();}
 function lnBackHome(){lnCurrentDir=null;renderLearning();}
+function lnRowAction(action,handler,...args){
+  return rowActionButton(action,'onclick',handler+'('+args.map(value=>JSON.stringify(value)).join(',')+')');
+}
 /* —— 详情页：整页展示某个方向 —— */
 function renderLnDetail(){
   const L0=lnData();const d=L0.directions.find(x=>x.id===lnCurrentDir);
@@ -8940,11 +8962,11 @@ function renderLnDetail(){
   else if(lnDetailTab==='outline')bodyHtml=renderLnDirOutline(d,L0);
   else if(lnDetailTab==='timeline')bodyHtml=renderLnDirTimeline(d,L0);
   else if(lnDetailTab==='selftests')bodyHtml=renderLnDirSelftests(d,L0);
-  $('#lnBody').innerHTML=`<div class="ln-detail-head" style="box-shadow:inset 4px 0 0 ${d.color||'#888'}">
+  $('#lnBody').innerHTML=`<div class="ln-detail-head ln-direction-head" style="box-shadow:inset 4px 0 0 ${d.color||'#888'}">
       <button class="ln-back" onclick="lnBackHome()">‹ 返回</button>
       <span class="ln-dot" style="background:${d.color||'#888'}"></span>
       <div class="ln-detail-t"><b>${esc(d.name)}</b>${d.active?'':' <span class="ln-tag">已停用</span>'}</div>
-      <div class="ln-detail-acts"><button onclick="openLnDirModal('${d.id}')">编辑</button><button onclick="lnToggleDir('${d.id}')">${d.active?'停用':'启用'}</button><button onclick="lnDelDir('${d.id}')" style="color:var(--bad)">删除</button></div>
+      <div class="row-actions">${lnRowAction('edit','openLnDirModal',d.id)}${lnRowAction(d.active?'disable':'enable','lnToggleDir',d.id)}${lnRowAction('delete','lnDelDir',d.id)}</div>
     </div>
     ${st.total?`<div class="ln-bar" style="margin:2px 12px 0"><i style="width:${pct}%;background:${d.color}"></i></div>`:''}
     <div class="ln-group-tabs">${groupHtml}</div>
@@ -9020,7 +9042,7 @@ function renderLnDirPlans(d,L0){
   plans.forEach(p=>{
     const all=(p.milestones||[]).flatMap(m=>(m.tasks||[]));const done=all.filter(t=>t.done).length;const pct=all.length?Math.round(done/all.length*100):0;
     html+=`<div class="ln-card">
-      <div class="ln-item" style="border:none;padding:0"><div class="ln-main"><div class="ln-title" onclick="lnOpenNode('${d.id}','${p.id}','','')" style="cursor:pointer" title="查看该计划下关联的资料 / 问题">${esc(p.title)} <span style="color:var(--text-3);font-weight:400">› 关联</span></div><div class="ln-sub">${done}/${all.length} 任务 · ${pct}%</div></div><div class="ln-acts"><button onclick="openLnPlanModal('${d.id}','${p.id}')">编辑</button><button onclick="lnDelPlan('${p.id}')" style="color:var(--bad)">删除</button></div></div>
+      <div class="ln-item" style="border:none;padding:0"><div class="ln-main"><div class="ln-title" onclick="lnOpenNode('${d.id}','${p.id}','','')" style="cursor:pointer" title="查看该计划下关联的资料 / 问题">${esc(p.title)} <span style="color:var(--text-3);font-weight:400">› 关联</span></div><div class="ln-sub">${done}/${all.length} 任务 · ${pct}%</div></div><div class="ln-acts">${lnRowAction('edit','openLnPlanModal',d.id,p.id)}${lnRowAction('delete','lnDelPlan',p.id)}</div></div>
       <div class="ln-bar"><i style="width:${pct}%;background:${d.color}"></i></div>
       ${renderLnPlanMilestones(p,L0)}
     </div>`;
@@ -9230,7 +9252,7 @@ function lnContentListHtml(L0,dirId,parentId,depth){
     const state=isKp?`<span class="ln-kp-state">${c.mastered?'已掌握':'未掌握'}</span>`:'';
     let h=`<div class="card ${isKp?'ln-kp':''} ${isKp&&c.mastered?'done':''} ${isChild?(c.kind==='resource'?'ln-tree-child ln-res-child':'ln-tree-child'):''}" style="margin-top:${isChild?6:8}px"><div class="ln-item" style="border:none;${isChild?'padding:0':'padding:7px 2px'}">`;
     h+= hasKids ? `<span class="ln-caret" onclick="lnToggleTopic('${c.id}')">${open?'▼':'▶'}</span>` : `<span class="ln-caret-ph"></span>`;
-    h+=`<div class="ln-main"><div class="ln-title">${esc(c.name)} <span class="ln-tag">${kindName}</span>${state}${notesTag}</div><div class="ln-sub">${tags?tags+' · ':''}${c.url?`<a href="${esc(c.url)}" target="_blank" style="color:var(--text-2)">链接</a> · `:''}${c.note?esc(c.note):'无备注'}</div></div><div class="ln-acts"><button onclick="openLnContentModal('${c.directionId}','${c.id}')">编辑</button>${!isKp?`<button onclick="lnQuickAddChild('${c.directionId}','${c.id}')">+ 子内容</button>`:''}${isKp?`<button onclick="lnToggleMastered('${c.id}')">${c.mastered?'标未掌握':'标掌握'}</button>`:''}<button onclick="addReview('content','${c.id}','${c.directionId}')">复习</button><button onclick="lnDelContent('${c.id}')" style="color:var(--bad)">删除</button></div></div>${lnNotesHtml(c)}</div>`;
+    h+=`<div class="ln-main"><div class="ln-title">${esc(c.name)} <span class="ln-tag">${kindName}</span>${state}${notesTag}</div><div class="ln-sub">${tags?tags+' · ':''}${c.url?`<a href="${esc(c.url)}" target="_blank" style="color:var(--text-2)">链接</a> · `:''}${c.note?esc(c.note):'无备注'}</div></div><div class="ln-acts">${lnRowAction('edit','openLnContentModal',c.directionId,c.id)}${!isKp?`<button onclick="lnQuickAddChild('${c.directionId}','${c.id}')">+ 子内容</button>`:''}${isKp?`<button onclick="lnToggleMastered('${c.id}')">${c.mastered?'标未掌握':'标掌握'}</button>`:''}<button onclick="addReview('content','${c.id}','${c.directionId}')">复习</button>${lnRowAction('delete','lnDelContent',c.id)}</div></div>${lnNotesHtml(c)}</div>`;
     if(hasKids&&open) h+=lnContentListHtml(L0,dirId,c.id,depth+1);
     return h;
   }).join('');
@@ -9256,7 +9278,7 @@ function lnNodeContentsHtml(L0,roots,hit,depth){
     const hasNotes=c.notes&&c.notes.trim();
     const notesTag=hasNotes?`<span class="ln-tag" style="cursor:pointer" onclick="lnToggleNotes('${c.id}')" title="点击查看学习心得">心得</span>`:'';
     const caret=hasKids?`<span class="ln-caret" onclick="lnToggleTopic('${c.id}')" title="点击折叠/展开子节点">${open?'▼':'▶'}</span>`:`<span class="ln-caret-ph"></span>`;
-    let h=`<div class="card ${isChild?'ln-tree-child':''}" style="margin-top:${isChild?6:8}px"><div class="ln-item" style="border:none;${isChild?'padding:0':'padding:7px 2px'}">${caret}<div class="ln-main"><div class="ln-title">${esc(c.name)} <span class="ln-tag">${isTopic?'子主题':'资料'}</span>${notesTag}</div><div class="ln-sub">${c.url?`<a href="${esc(c.url)}" target="_blank" style="color:var(--text-2)">链接</a> · `:''}${c.note?esc(c.note):'无备注'}</div></div><div class="ln-acts"><button onclick="openLnContentModal('${c.directionId}','${c.id}')">编辑</button><button onclick="addReview('content','${c.id}','${c.directionId}')">复习</button><button onclick="lnDelContent('${c.id}')" style="color:var(--bad)">删除</button></div></div>${lnNotesHtml(c)}</div>`;
+    let h=`<div class="card ${isChild?'ln-tree-child':''}" style="margin-top:${isChild?6:8}px"><div class="ln-item" style="border:none;${isChild?'padding:0':'padding:7px 2px'}">${caret}<div class="ln-main"><div class="ln-title">${esc(c.name)} <span class="ln-tag">${isTopic?'子主题':'资料'}</span>${notesTag}</div><div class="ln-sub">${c.url?`<a href="${esc(c.url)}" target="_blank" style="color:var(--text-2)">链接</a> · `:''}${c.note?esc(c.note):'无备注'}</div></div><div class="ln-acts">${lnRowAction('edit','openLnContentModal',c.directionId,c.id)}<button onclick="addReview('content','${c.id}','${c.directionId}')">复习</button>${lnRowAction('delete','lnDelContent',c.id)}</div></div>${lnNotesHtml(c)}</div>`;
     if(hasKids&&open) h+=lnNodeContentsHtml(L0,lnFifo(kids,'order'),hit,depth+1);
     return h;
   }).join('');
@@ -9478,8 +9500,8 @@ function renderLnDirQuestions(d,L0){
       </div>
       <div class="ln-acts">
         ${q.status==='solved'?`<button onclick="addReview('question','${q.id}','${d.id}')">复习</button>`:''}
-        <button onclick="openLnQuestionModal('${q.id}')">编辑</button>
-        <button onclick="lnDelQuestion('${q.id}')" style="color:var(--bad)">删除</button>
+        ${lnRowAction('edit','openLnQuestionModal',q.id)}
+        ${lnRowAction('delete','lnDelQuestion',q.id)}
       </div>
     </div></div>`;
   });
@@ -9658,7 +9680,7 @@ function lnKbTreeHtml(L0,dirId,roots,hit,depth){
     // v3.20.10: 知识库主题树加真折叠按钮（之前是 ln-caret-ph 占位符，所有节点都不可折叠——用户反馈的 bug）
     const caret=hasKids?`<span class="ln-caret" onclick="lnToggleTopic('${c.id}')" title="点击折叠/展开子节点">${open?'▼':'▶'}</span>`:`<span class="ln-caret-ph"></span>`;
     // v3.20.19: 知识库主题树子级渲染与内容模块 lnContentListHtml 100% 对齐——resource 子级加 ln-res-child（棕边线+莫兰迪浅背景）；title 加"心得"标签；心得区移到 .ln-item 之后并总渲染（含"展开心得"按钮）；ln-sub 补 url 链接
-    let h=`<div class="card ${isKp?'ln-kp':''} ${isKp&&c.mastered?'done':''} ${isChild?(c.kind==='resource'?'ln-tree-child ln-res-child':'ln-tree-child'):''}" style="margin-top:${isChild?6:8}px"><div class="ln-item" style="border:none;${isChild?'padding:0':'padding:7px 2px'}">${caret}<div class="ln-main"><div class="ln-title">${esc(c.name)} <span class="ln-tag">${kind}</span>${isKp?`<span class="ln-kp-state">${c.mastered?'已掌握':'未掌握'}</span>`:''}${notesTag}</div><div class="ln-sub">${tags?tags+' · ':''}${c.url?`<a href="${esc(c.url)}" target="_blank" style="color:var(--text-2)">链接</a> · `:''}${c.note?esc(c.note):'无备注'}</div></div><div class="ln-acts"><button onclick="openLnContentModal('${c.directionId}','${c.id}')">编辑</button>${!isKp?`<button onclick="lnQuickAddChild('${c.directionId}','${c.id}')">+ 子内容</button>`:''}${isKp?`<button onclick="lnToggleMastered('${c.id}')">${c.mastered?'标未掌握':'标掌握'}</button>`:''}<button onclick="addReview('content','${c.id}','${c.directionId}')">复习</button><button onclick="lnDelContent('${c.id}')" style="color:var(--bad)">删除</button></div></div>${lnNotesHtml(c)}</div>`;
+    let h=`<div class="card ${isKp?'ln-kp':''} ${isKp&&c.mastered?'done':''} ${isChild?(c.kind==='resource'?'ln-tree-child ln-res-child':'ln-tree-child'):''}" style="margin-top:${isChild?6:8}px"><div class="ln-item" style="border:none;${isChild?'padding:0':'padding:7px 2px'}">${caret}<div class="ln-main"><div class="ln-title">${esc(c.name)} <span class="ln-tag">${kind}</span>${isKp?`<span class="ln-kp-state">${c.mastered?'已掌握':'未掌握'}</span>`:''}${notesTag}</div><div class="ln-sub">${tags?tags+' · ':''}${c.url?`<a href="${esc(c.url)}" target="_blank" style="color:var(--text-2)">链接</a> · `:''}${c.note?esc(c.note):'无备注'}</div></div><div class="ln-acts">${lnRowAction('edit','openLnContentModal',c.directionId,c.id)}${!isKp?`<button onclick="lnQuickAddChild('${c.directionId}','${c.id}')">+ 子内容</button>`:''}${isKp?`<button onclick="lnToggleMastered('${c.id}')">${c.mastered?'标未掌握':'标掌握'}</button>`:''}<button onclick="addReview('content','${c.id}','${c.directionId}')">复习</button>${lnRowAction('delete','lnDelContent',c.id)}</div></div>${lnNotesHtml(c)}</div>`;
     if(hasKids&&open)h+=lnKbTreeHtml(L0,dirId,kids,hit,depth+1);
     return h;
   }).join('');
@@ -9963,9 +9985,9 @@ function renderLnNodeView(){
   const selftestsAll=lnFifo(ni.selftests,'date');
   const statHtml=[['📄 资料',hit.size],['💡 问题',questionsAll.length],['📚 知识',questionsAll.filter(q=>q.status==='solved'&&q.answer&&q.answer.trim()).length],['🔁 复习',reviewsAll.length],['🧪 自测',selftestsAll.length]].map(([s,n])=>`<div class="ln-ov-i"><b>${n}</b><span>${s}</span></div>`).join('');
   const contentHtml=hit.size?lnNodeContentsHtml(L0,roots,hit,0):'<div class="ln-empty">还没有资料，点下方「+ 资料/子主题」添加。</div>';
-  const qHtml=questionsAll.length?questionsAll.map(q=>{const stName={open:'未解决',doing:'解决中',solved:'已解决'};const tags=(q.tags||[]).map(x=>`<span class="ln-tag">${esc(x)}</span>`).join('');return `<div class="card" style="margin-top:8px"><div class="ln-item" style="border:none;padding:0"><div class="ln-main"><div class="ln-title">${esc(q.title)} <span class="ln-badge ${q.status}">${stName[q.status]}</span>${q.hard?'<span class="ln-tag" style="color:var(--bad);border-color:var(--bad)">难点</span>':''}</div><div class="ln-sub">${tags?tags+' · ':''}${q.detail?esc(q.detail).slice(0,80):'暂无详情'}</div>${q.status==='solved'&&q.answer?`<div class="ln-kb-a"><b>答案：</b>${esc(q.answer)}</div>`:''}</div><div class="ln-acts">${q.status==='solved'?`<button onclick="addReview('question','${q.id}','${q.directionId}')">复习</button>`:''}<button onclick="openLnQuestionModal('${q.id}')">编辑</button><button onclick="lnToggleHard('${q.id}')">${q.hard?'取消难点':'标难点'}</button><button onclick="lnDelQuestion('${q.id}')" style="color:var(--bad)">删除</button></div></div></div>`}).join(''):'<div class="ln-empty">还没有问题，点下方「+ 问题」记录。</div>';
+  const qHtml=questionsAll.length?questionsAll.map(q=>{const stName={open:'未解决',doing:'解决中',solved:'已解决'};const tags=(q.tags||[]).map(x=>`<span class="ln-tag">${esc(x)}</span>`).join('');return `<div class="card" style="margin-top:8px"><div class="ln-item" style="border:none;padding:0"><div class="ln-main"><div class="ln-title">${esc(q.title)} <span class="ln-badge ${q.status}">${stName[q.status]}</span>${q.hard?'<span class="ln-tag" style="color:var(--bad);border-color:var(--bad)">难点</span>':''}</div><div class="ln-sub">${tags?tags+' · ':''}${q.detail?esc(q.detail).slice(0,80):'暂无详情'}</div>${q.status==='solved'&&q.answer?`<div class="ln-kb-a"><b>答案：</b>${esc(q.answer)}</div>`:''}</div><div class="ln-acts">${q.status==='solved'?`<button onclick="addReview('question','${q.id}','${q.directionId}')">复习</button>`:''}${lnRowAction('edit','openLnQuestionModal',q.id)}<button onclick="lnToggleHard('${q.id}')">${q.hard?'取消难点':'标难点'}</button>${lnRowAction('delete','lnDelQuestion',q.id)}</div></div></div>`}).join(''):'<div class="ln-empty">还没有问题，点下方「+ 问题」记录。</div>';
   const rHtml=reviewsAll.length?reviewsAll.map(r=>{let title='',sub='';if(r.refType==='question'){const qq=L0.questions.find(x=>x.id===r.refId);if(qq)title=qq.title;sub='问题'}else{const cc=L0.contents.find(x=>x.id===r.refId);if(cc)title=cc.name;sub='内容'}const due=r.due<=todayStr();return `<div class="card" style="margin-top:8px"><div class="ln-item" style="border:none;padding:0"><div class="ln-main"><div class="ln-title">${esc(title)}</div><div class="ln-sub">${sub} · 下次${due?'<b class="ln-due">今天</b>':r.due}</div></div><div class="ln-acts"><button onclick="lnMarkReviewed('${r.id}')">${due?'已复习':'推迟'}</button><button onclick="lnDelReview('${r.id}')" style="color:var(--bad)">移除</button></div></div></div>`}).join(''):'<div class="ln-empty">还没有复习安排。</div>';
-  const stHtml=selftestsAll.length?selftestsAll.map(s=>{const node=lnTaskTitleById(L0,s.nodeId);return `<div class="card" style="margin-top:8px"><div class="ln-item" style="border:none;padding:0"><div class="ln-main"><div class="ln-title">${esc(s.title)} <span class="ln-tag">${s.score!=null?('得分 '+s.score):'未打分'}</span></div><div class="ln-sub">${node?('节点：'+esc(node)+' · '):''}${s.weak?('薄弱：'+esc(s.weak)+' · '):''}${s.date||''}</div>${s.note?`<div class="ln-kb-a">${esc(s.note)}</div>`:''}</div><div class="ln-acts"><button onclick="openLnSelftestModal('${d.id}','${s.id}')">编辑</button><button onclick="lnDelSelftest('${s.id}')" style="color:var(--bad)">删除</button></div></div></div>`}).join(''):'<div class="ln-empty">还没有自测记录。</div>';
+  const stHtml=selftestsAll.length?selftestsAll.map(s=>{const node=lnTaskTitleById(L0,s.nodeId);return `<div class="card" style="margin-top:8px"><div class="ln-item" style="border:none;padding:0"><div class="ln-main"><div class="ln-title">${esc(s.title)} <span class="ln-tag">${s.score!=null?('得分 '+s.score):'未打分'}</span></div><div class="ln-sub">${node?('节点：'+esc(node)+' · '):''}${s.weak?('薄弱：'+esc(s.weak)+' · '):''}${s.date||''}</div>${s.note?`<div class="ln-kb-a">${esc(s.note)}</div>`:''}</div><div class="ln-acts">${lnRowAction('edit','openLnSelftestModal',d.id,s.id)}${lnRowAction('delete','lnDelSelftest',s.id)}</div></div></div>`}).join(''):'<div class="ln-empty">还没有自测记录。</div>';
   const quick=`<div class="ln-toolbar"><button onclick="openLnContentModal('${d.id}',null,'${curNode}')">+ 资料/子主题</button><button onclick="openLnQuestionModal(null,'${curNode}','${d.id}')">+ 问题</button><button onclick="openLnSelftestModal('${d.id}',null,'${curNode}')">+ 自测</button></div>`;
   const secBase=`${d.id}|node|${curNode}`;
   $('#lnBody').innerHTML=`<div class="ln-detail-head" style="box-shadow:inset 4px 0 0 ${col}">
@@ -9987,7 +10009,7 @@ function renderLnDirMistakes(d,L0){
   let html='';
   if(!list.length){html='<div class="ln-empty">还没有难点/易错记录。<br>在「问题」里勾选「标记为难点」即可归集到这里。</div>';return html}
   html+='<div class="ln-ms">⚠️ 难点 / 易错（'+list.length+'）</div>';
-  list.forEach(q=>{const node=lnTaskTitleById(L0,q.nodeId);const stName={open:'未解决',doing:'解决中',solved:'已解决'};html+=`<div class="card" style="margin-top:8px"><div class="ln-item" style="border:none;padding:0"><div class="ln-main"><div class="ln-title">${esc(q.title)} <span class="ln-badge ${q.status}">${stName[q.status]}</span></div><div class="ln-sub">${node?('节点：'+esc(node)+' · '):''}${q.detail?esc(q.detail).slice(0,80):'暂无详情'}</div></div><div class="ln-acts"><button onclick="openLnQuestionModal('${q.id}')">编辑</button><button onclick="lnToggleHard('${q.id}')">取消难点</button><button onclick="lnDelQuestion('${q.id}')" style="color:var(--bad)">删除</button></div></div></div>`});
+  list.forEach(q=>{const node=lnTaskTitleById(L0,q.nodeId);const stName={open:'未解决',doing:'解决中',solved:'已解决'};html+=`<div class="card" style="margin-top:8px"><div class="ln-item" style="border:none;padding:0"><div class="ln-main"><div class="ln-title">${esc(q.title)} <span class="ln-badge ${q.status}">${stName[q.status]}</span></div><div class="ln-sub">${node?('节点：'+esc(node)+' · '):''}${q.detail?esc(q.detail).slice(0,80):'暂无详情'}</div></div><div class="ln-acts">${lnRowAction('edit','openLnQuestionModal',q.id)}<button onclick="lnToggleHard('${q.id}')">取消难点</button>${lnRowAction('delete','lnDelQuestion',q.id)}</div></div></div>`});
   return html;
 }
 /* —— 资源 —— */
@@ -10024,7 +10046,7 @@ function renderLnDirResources(d,L0){
       const notesTag=hasNotes?`<span class="ln-tag" style="cursor:pointer" onclick="lnToggleNotes('${c.id}')" title="点击查看学习心得">心得</span>`:'';
       const tags=(c.tags||[]).map(t=>`<span class="ln-tag">#${esc(t)}</span>`).join('');
       const link=c.url?`<a href="${esc(c.url)}" target="_blank" style="color:var(--text-2)">链接</a> ·`:'';
-      html+=`<div class="card ln-res-child" style="margin-top:6px"><div class="ln-item" style="border:none;padding:0"><span class="ln-caret-ph"></span><div class="ln-main"><div class="ln-title">${esc(c.name)}${notesTag}</div><div class="ln-sub">${tags?tags+' · ':''}${link}${c.note?esc(c.note):'无备注'} · ${c.createdAt||''}</div></div><div class="ln-acts"><button onclick="openLnContentModal('${c.directionId}','${c.id}')">编辑</button><button onclick="lnDelContent('${c.id}')" style="color:var(--bad)">删除</button></div></div>${lnNotesHtml(c)}</div>`;
+      html+=`<div class="card ln-res-child" style="margin-top:6px"><div class="ln-item" style="border:none;padding:0"><span class="ln-caret-ph"></span><div class="ln-main"><div class="ln-title">${esc(c.name)}${notesTag}</div><div class="ln-sub">${tags?tags+' · ':''}${link}${c.note?esc(c.note):'无备注'} · ${c.createdAt||''}</div></div><div class="ln-acts">${lnRowAction('edit','openLnContentModal',c.directionId,c.id)}${lnRowAction('delete','lnDelContent',c.id)}</div></div>${lnNotesHtml(c)}</div>`;
     });
     html+=`</div></div>`;
   });
@@ -10240,7 +10262,7 @@ function renderLnDirSelftests(d,L0){
   const nodeOpts=lnNodeOptions(L0,d.id).map(o=>`<option value="${o.value}">${esc(o.label)}</option>`).join('');
   let html=`<div class="ln-quick"><input type="text" id="lnStTitle_${d.id}" placeholder="自测名称，如 第1章小测" onkeydown="if(event.key==='Enter')lnQuickAddSelftest('${d.id}')"><select id="lnStNode_${d.id}" title="关联节点">${nodeOpts}</select><button onclick="lnQuickAddSelftest('${d.id}')">记录</button></div>`;
   if(!list.length){html+='<div class="ln-empty">还没有自测记录。<br>学完一个节点后做自测，记录得分与薄弱点，帮助安排复习。</div>';return html}
-  list.forEach(s=>{const node=lnTaskTitleById(L0,s.nodeId);html+=`<div class="card" style="margin-top:8px"><div class="ln-item" style="border:none;padding:0"><div class="ln-main"><div class="ln-title">${esc(s.title)} <span class="ln-tag">${s.score!=null?('得分 '+s.score):'未打分'}</span></div><div class="ln-sub">${node?('节点：'+esc(node)+' · '):''}${s.weak?('薄弱：'+esc(s.weak)+' · '):''}${s.date||''}</div>${s.note?`<div class="ln-kb-a">${esc(s.note)}</div>`:''}</div><div class="ln-acts"><button onclick="openLnSelftestModal('${d.id}','${s.id}')">编辑</button><button onclick="lnDelSelftest('${s.id}')" style="color:var(--bad)">删除</button></div></div></div>`});
+  list.forEach(s=>{const node=lnTaskTitleById(L0,s.nodeId);html+=`<div class="card" style="margin-top:8px"><div class="ln-item" style="border:none;padding:0"><div class="ln-main"><div class="ln-title">${esc(s.title)} <span class="ln-tag">${s.score!=null?('得分 '+s.score):'未打分'}</span></div><div class="ln-sub">${node?('节点：'+esc(node)+' · '):''}${s.weak?('薄弱：'+esc(s.weak)+' · '):''}${s.date||''}</div>${s.note?`<div class="ln-kb-a">${esc(s.note)}</div>`:''}</div><div class="ln-acts">${lnRowAction('edit','openLnSelftestModal',d.id,s.id)}${lnRowAction('delete','lnDelSelftest',s.id)}</div></div></div>`});
   return html;
 }
 function lnQuickAddSelftest(dirId){const title=$(`#lnStTitle_${dirId}`).value.trim();if(!title){toast('请填写名称');return}const nodeId=$(`#lnStNode_${dirId}`).value||null;const L0=lnData();L0.selftests.unshift({id:uid(),directionId:dirId,title,nodeId,score:null,weak:'',note:'',date:todayStr()});persist();lnRefresh();toast('已记录')}
