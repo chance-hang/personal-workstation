@@ -3672,31 +3672,35 @@ function ledgerRemove(record){
 }
 function mergeLedgerRecords(incoming){
   const current=S.ledger||[];
-  const rows=new Map(current.filter(row=>row?.id).map(row=>[row.id,row]));
+  if(!Array.isArray(incoming.ledger)&&!incoming.ledgerDeleted)return {changed:false,added:0};
+  const rows=[...current];
+  const indexes=new Map();
+  const additions=new Set();
+  current.forEach((row,i)=>{if(row?.id&&!indexes.has(row.id))indexes.set(row.id,i);});
   const marks=new Map(Object.entries(S.ledgerDeleted||{}));
   let marksChanged=false;
   if(Array.isArray(incoming.ledger))for(const row of incoming.ledger){
     if(!row?.id)continue;
-    const previous=rows.get(row.id);
-    if(!previous){rows.set(row.id,row);continue;}
+    const index=indexes.get(row.id);
+    if(index===undefined){indexes.set(row.id,rows.length);rows.push(row);additions.add(row.id);continue;}
+    const previous=rows[index];
     if(noteUpdatedAt(row.updatedAt)===null&&noteUpdatedAt(previous.updatedAt)===null)continue;
     const newest=timeNewest(previous,row);
-    if(stableNote(newest)!==stableNote(previous))rows.set(row.id,newest);
+    if(stableNote(newest)!==stableNote(previous))rows[index]=newest;
   }
   for(const [id,value] of Object.entries(incoming.ledgerDeleted||{})){
     const at=noteUpdatedAt(value);
     if(at!==null&&at>(noteUpdatedAt(marks.get(id))??-Infinity)){marks.set(id,value);marksChanged=true;}
   }
-  for(const [id,deleted] of marks){
-    const row=rows.get(id);
-    if(row&&(noteUpdatedAt(deleted)??-Infinity)>=(noteUpdatedAt(row.updatedAt)??-Infinity))rows.delete(id);
-  }
-  const ledger=[...rows.values()];
+  const ledger=rows.filter(row=>{
+    if(!row?.id||!marks.has(row.id))return true;
+    const deleted=noteUpdatedAt(marks.get(row.id));
+    return deleted===null||deleted<(noteUpdatedAt(row.updatedAt)??-Infinity);
+  });
   const changed=ledger.length!==current.length||ledger.some((row,i)=>row!==current[i]);
-  const existingIds=new Set(current.map(row=>row?.id));
   if(changed)S.ledger=ledger;
   if(marksChanged)S.ledgerDeleted=Object.fromEntries(marks);
-  return {changed:changed||marksChanged,added:ledger.filter(row=>!existingIds.has(row.id)).length};
+  return {changed:changed||marksChanged,added:ledger.filter(row=>additions.has(row?.id)).length};
 }
 function renderMoney(){
   renderCats();renderLedgerAccountChoice();renderFlow();renderMonthStat();renderCatChart();renderTodayStat();renderNoteQuickRow();renderFocusCard();renderSavings();renderExpenseAnalysis();
@@ -8371,20 +8375,28 @@ function editTodoById(id){openMatter('todo',id)}
 function editLedgerById(id){
   if(!requireVisibleAmounts('修改账目'))return;
   const x=S.ledger.find(z=>z.id===id);if(!x)return;
-  const cats=catsFor(x.type),snapshot=stableNote(x);
+  const snapshot=stableNote(x);
   modal(`<h4>编辑账目<span class="modal-close" onclick="confirmClose(()=>{$('#elSave').click()})">×</span></h4>
     <div class="field"><span class="lab">日期</span><input type="date" id="elDate" class="input-styled" value="${esc(x.date)}"></div>
     <div class="field"><span class="lab">类型</span><select id="elType" class="input-styled"><option value="expense" ${x.type==='expense'?'selected':''}>支出</option><option value="income" ${x.type==='income'?'selected':''}>收入</option></select></div>
-    <div class="field"><span class="lab">分类</span><select id="elCat" class="input-styled">${cats.map(c=>`<option value="${esc(c[0])}" ${c[0]===x.category?'selected':''}>${esc(c[0])}</option>`).join('')}</select></div>
-    <div class="field"><span class="lab">金额</span><input type="number" id="elAmt" class="input-styled" value="${x.amount}"></div>
+    <div class="field"><span class="lab">分类</span><select id="elCat" class="input-styled"></select></div>
+    <div class="field"><span class="lab">金额</span><input type="number" id="elAmt" class="input-styled" value="${esc(x.amount)}"></div>
     <fieldset class="ledger-account-field" id="elAccount"><legend></legend><div class="ledger-account-choices"></div></fieldset>
     <div class="field"><span class="lab">备注</span><input id="elNote" class="input-styled" value="${esc(x.note||'')}"></div>
     <p class="sv-error" id="elError" role="alert"></p>
     <div class="btns"><button class="cancel" onclick="confirmClose(()=>{$('#elSave').click()})">关闭</button><button class="ok" id="elSave">保存</button></div>`,{noMaskClose:true});
+  const renderCategories=type=>{
+    const cats=catsFor(type).map(c=>c[0]);
+    const original=type===x.type;
+    const unavailable=original&&!cats.includes(x.category);
+    const previous=unavailable?`<option value="" selected>${esc(x.category||'未分类')}（原分类）</option>`:'';
+    $('#elCat').innerHTML=previous+cats.map(name=>`<option value="${esc(name)}"${original&&name===x.category?' selected':''}>${esc(name)}</option>`).join('');
+  };
+  renderCategories(x.type);
   renderLedgerAccountChoices('elAccount',x.type,x.accountId,x.accountId);
   $('#elType').onchange=()=>{
     const type=$('#elType').value,selected=selectedLedgerAccount('elAccount');
-    $('#elCat').innerHTML=catsFor(type).map(c=>`<option value="${esc(c[0])}">${esc(c[0])}</option>`).join('');
+    renderCategories(type);
     renderLedgerAccountChoices('elAccount',type,selected,x.accountId);
   };
   $('#elSave').onclick=()=>{
@@ -8393,7 +8405,8 @@ function editLedgerById(id){
     if(stableNote(current)!==snapshot){$('#elError').textContent='账单已在别处修改，请重新打开。';return;}
     const date=$('#elDate').value,amount=parseFloat($('#elAmt').value),accountId=selectedLedgerAccount('elAccount');
     if(!timeValidDay(date)||!Number.isFinite(amount)){$('#elError').textContent='请核对记账日期和金额。';return;}
-    const next={...current,date,amount,type:$('#elType').value,category:$('#elCat').value,note:$('#elNote').value.trim(),updatedAt:timeEditTimestamp(current)};
+    const type=$('#elType').value,category=$('#elCat').value;
+    const next={...current,date,amount,type,category:category||(type===current.type?current.category:category),note:$('#elNote').value.trim(),updatedAt:timeEditTimestamp(current)};
     if(accountId)next.accountId=accountId;else delete next.accountId;
     const error=ledgerPut(next,current);
     if(error){$('#elError').textContent=maskMoneyText(error);return;}

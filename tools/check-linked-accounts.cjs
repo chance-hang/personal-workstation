@@ -271,5 +271,60 @@ async function sync(page,direction){
   assert.equal(await question.count(),1);
   assert.equal(await learningHead.evaluate(row=>row.scrollWidth<=row.clientWidth+1),true);
   pass('compact account and learning controls fit one row at 320px; edit, suspend, enable and delete confirmation still work');
+
+  await view(p,'entry');
+  const legacy=await p.evaluate(()=>{
+    const old={id:'legacy-removed-category',date:'2026-11-21',type:'expense',category:'旧分类',amount:9.25};
+    const noId={date:'2026-11-21',type:'income',amount:11,category:'工资'};
+    S.ledger.push(old,noId);
+    mergeLedgerRecords({ledger:[old]});
+    return {count:S.ledger.length};
+  });
+  await p.evaluate(()=>editLedgerById('legacy-removed-category'));
+  assert.match(await p.locator('#elCat option:checked').textContent(),/旧分类/);
+  await chooseAccount(p,'wallet','elAccount');
+  await p.locator('#elSave').click();
+  assert.deepEqual(await p.evaluate(()=>({
+    count:S.ledger.length,
+    category:S.ledger.find(x=>x.id==='legacy-removed-category').category,
+    noId:S.ledger.some(x=>!x.id&&x.amount===11)
+  })),{...legacy,category:'旧分类',noId:true});
+  assert.equal(await money(p,'wallet'),oldBalance-925);
+  pass('linking an older bill preserves its unavailable category; merge retains local legacy bills without IDs');
+
+  const dataset={ledger:[],transfers:[]}, balances={fund:200000,credit:0}, month={inc:0,exp:0};
+  let rng=5927;
+  for(const [index,period] of ['2026-10','2026-11'].entries()){
+    for(let day=1;day<=20;day++){
+      const date=period+'-'+String(day).padStart(2,'0');
+      for(let n=0;n<7;n++){
+        rng=(rng*48271)%2147483647;
+        const cents=rng%2000+1, income=n===0, id=n%3===0&&!income?'credit':'fund';
+        dataset.ledger.push({id:'fixture-'+index+'-'+day+'-'+n,date,type:income?'income':'expense',accountId:id,amount:cents/100,category:income?'工资':'餐饮'});
+        balances[id]+=income?cents:-cents;
+        if(index===1)month[income?'inc':'exp']+=cents;
+      }
+      const repayment=300;
+      balances.fund-=repayment;
+      balances.credit+=repayment;
+      dataset.transfers.push({id:'repayment-'+index+'-'+day,date,kind:'transfer',accountId:'fund',toAccountId:'credit',amountCents:repayment});
+    }
+  }
+  const replay=await p.evaluate(({ledger,transfers})=>{
+    S.ledger=ledger;
+    S.savingsEntries=transfers;
+    S.savingsPayroll=null;
+    S.savingsPositions=[];
+    S.savingsAccounts=[
+      {id:'fund',name:'测试账户',openingDate:'2026-10-01',openingCents:200000},
+      {id:'credit',name:'测试信用卡',openingDate:'2026-10-01',openingCents:0,kind:'credit'}
+    ];
+    const [fund,credit]=svAccounts();
+    const summary=svSummary('2026-11-01','2026-11-30');
+    const actual=monthSum('2026-11');
+    return {validation:svValidate(S),balances:{fund:svBalance(fund),credit:svBalance(credit)},closing:summary.closing,totals:{inc:Math.round(actual.inc*100),exp:Math.round(actual.exp*100)},wealth:svWealth()};
+  },dataset);
+  assert.deepEqual(replay,{validation:'',balances,closing:balances.fund+balances.credit,totals:month,wealth:{deposit:balances.fund,other:0,debt:-balances.credit,total:balances.fund,net:balances.fund+balances.credit}});
+  pass('280 synthetic bills and 40 repayments across two months reconcile to independent balances and ledger totals in cents');
   assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
 })().catch(error=>{console.error(error);process.exitCode=1}).finally(async()=>{await browser?.close();server?.kill();});
