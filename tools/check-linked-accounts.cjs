@@ -326,5 +326,48 @@ async function sync(page,direction){
   },dataset);
   assert.deepEqual(replay,{validation:'',balances,closing:balances.fund+balances.credit,totals:month,wealth:{deposit:balances.fund,other:0,debt:-balances.credit,total:balances.fund,net:balances.fund+balances.credit}});
   pass('280 synthetic bills and 40 repayments across two months reconcile to independent balances and ledger totals in cents');
+
+  await p.evaluate(()=>{
+    clearTimeout(syncTimer);
+    S=structuredClone(DEFAULT);
+    S.budget=4200;
+    S.savingsPositions=[{id:'existing-card-debt',kind:'liability',name:'虚拟旧信用卡',amountCents:12345}];
+    S.ledger=[{id:'old-credit-bill',date:'2026-11-21',type:'expense',amount:15,category:'餐饮',note:'虚拟旧账'}];
+    renderAll();
+  });
+  await view(p,'entry');
+  const addCredit=p.getByRole('button',{name:'添加信用卡',exact:true});
+  assert.equal(await addCredit.isVisible(),true);
+  assert.equal(await accountChoice(p,'credit-from-existing-card-debt').count(),0);
+  await addCredit.click();
+  assert.equal(await p.locator('#svAccountKind').inputValue(),'credit');
+  await p.locator('#svAccountDebt').selectOption('existing-card-debt');
+  assert.equal(await p.locator('#svOpeningAmount').inputValue(),'123.45');
+  assert.equal(await p.locator('#svOpeningAmount').getAttribute('readonly'),'');
+  await p.locator('#svDialogCancel').click();
+  assert.equal(await p.evaluate(()=>svPositions()[0].kind),'liability');
+  assert.equal((await wealth(p)).debt,12345);
+  await addCredit.click();
+  await p.locator('#svAccountDebt').selectOption('existing-card-debt');
+  await save(p,'svAccountForm');
+  const newCard='credit-from-existing-card-debt';
+  assert.equal(await checkedAccount(p),newCard);
+  assert.equal(await addCredit.count(),0);
+  assert.equal(await money(p,newCard),-12345);
+  assert.deepEqual(await p.evaluate(()=>[svPositions()[0].kind,svPositions()[0].accountId]),['linked',newCard]);
+  assert.equal((await wealth(p)).debt,12345);
+
+  await view(p,'analysis');
+  const billEdit=p.locator('#flowList [data-flow-edit=old-credit-bill]');
+  await billEdit.click();
+  await chooseAccount(p,newCard,'elAccount');
+  await p.locator('#elAmt').fill('20.55');
+  await p.locator('#elSave').click();
+  assert.equal(await money(p,newCard),-14400);
+  assert.equal((await totals(p)).budget,20.55);
+  assert.match(await p.locator('#flowList [data-id=old-credit-bill] .f-amt').textContent(),/20.55/);
+  await p.evaluate(()=>setAmountPrivacy(true));
+  assert.equal(await billEdit.isDisabled(),true);
+  pass('the missing credit card can be set up from an existing debt without double counting; the ledger pencil edits both the bill and its balance');
   assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
 })().catch(error=>{console.error(error);process.exitCode=1}).finally(async()=>{await browser?.close();server?.kill();});

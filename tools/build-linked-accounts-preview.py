@@ -8,6 +8,7 @@ from pathlib import Path
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--output-dir", required=True, type=Path)
+parser.add_argument("--credit-setup", action="store_true")
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 out = args.output_dir.resolve()
@@ -50,9 +51,15 @@ state = {
         ],
     },
 }
+if args.credit_setup:
+    state["savingsAccounts"] = [account for account in state["savingsAccounts"] if account["id"] != "credit"]
+    next(bill for bill in state["ledger"] if bill["id"] == "credit-bill").pop("accountId")
+    state["savingsPositions"] = [{"id": "credit-debt", "kind": "liability", "name": "虚拟信用卡",
+                                 "amountCents": 45000, "updatedAt": stamp}]
 subprocess.run([
     sys.executable, str(root / "tools/build-review-preview.py"), "--output", str(preview),
-    "--label", "账户联动 · 虚拟数据", "--namespace", "review_linked_accounts_20261121_",
+    "--label", "信用卡与流水编辑 · 虚拟数据" if args.credit_setup else "账户联动 · 虚拟数据",
+    "--namespace", "review_credit_ledger_edit_20261121_" if args.credit_setup else "review_linked_accounts_20261121_",
 ], check=True)
 html = preview.read_text(encoding="utf-8")
 payload = json.dumps(state, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
@@ -70,7 +77,7 @@ html = html.replace('<span id="offlinePersistenceNote"></span>',
                     '<span id="offlinePersistenceNote"></span><p><a href="虚拟数据.json" download>下载虚拟数据</a> · <a href="验收说明.md">验收说明</a></p>')
 preview.write_text(html, encoding="utf-8")
 (out / "虚拟数据.json").write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
-(out / "验收说明.md").write_text("""# 账本与账户联动验收
+instructions = """# 账本与账户联动验收
 
 这是隔离的虚拟账本。打开时有四个账户和四笔账单。
 
@@ -80,4 +87,14 @@ preview.write_text(html, encoding="utf-8")
 4. 在「存款」默认查询小荷包，可分别查看余额 2800 元和本月新增存钱 800 元。试用「记小荷包转入」可将一笔转账分成新增和补回。
 5. 已关联账单可从账户流水查回原账单。选择「仅记账」则按普通账单处理。
 6. 账户行右侧可直接点铅笔编辑，用红色斜线圆圈停用。停用后的账户保留余额和流水，可用绿色勾选圆圈重新启用。
-""", encoding="utf-8")
+"""
+if args.credit_setup:
+    instructions = """# 信用卡与账单明细验收
+
+此预览使用虚拟账本。开始时只有一笔 450 元的旧信用卡负债。
+
+1. 从「账本 → 记账 → 扣款账户」点「＋ 信用卡」，在「使用已有负债」选虚拟信用卡。保存后该卡直接成为当前扣款账户，负债总额仍为 450 元。
+2. 用这张卡记 100 元支出。账本支出增加 100 元，应还增加到 550 元。
+3. 在「账本 → 分析 → 账单明细」点这笔记录右侧的铅笔，把金额改为 120 元。账本支出和欠款同步多计 20 元。
+"""
+(out / "验收说明.md").write_text(instructions, encoding="utf-8")

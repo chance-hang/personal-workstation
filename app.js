@@ -3639,7 +3639,8 @@ function renderLedgerAccountChoices(id,type,selected='',previous=''){
     const key=id+'-'+i;
     const name=esc(svAccountOptionLabel(a));
     return `<span class="ledger-account-choice"><input type="radio" name="${id}" id="${key}" value="${esc(a.id)}"${a.id===selected?' checked':''}><label class="cat-chip" for="${key}" title="${name}">${name}</label></span>`;
-  }).join('');
+  }).join('')+(id==='ledgerAccount'&&type==='expense'&&!accounts.some(svIsCredit)?
+    '<button type="button" class="cat-chip add ledger-add-credit" id="ledgerAddCredit" aria-label="添加信用卡">＋ 信用卡</button>':'');
   field.disabled=amountPrivacy;
 }
 function selectedLedgerAccount(id){
@@ -3647,6 +3648,8 @@ function selectedLedgerAccount(id){
 }
 function renderLedgerAccountChoice(){
   renderLedgerAccountChoices('ledgerAccount',curType,ledgerAccountChoices[curType]);
+  const addCredit=$('#ledgerAddCredit');
+  if(addCredit)addCredit.onclick=()=>svOpenAccount(null,'credit');
   updateLedgerAccountHint();
 }
 function updateLedgerAccountHint(){
@@ -3828,12 +3831,12 @@ function svSummary(from,to,id='',state=S){
   result.closing=result.opening+result.added+result.net+result.transfer+(result.linkedIncome||0)-(result.linkedExpense||0);
   return result;
 }
-function svPut(field,record){
+function svPut(field,record,related={}){
   const records=svRecords(field),index=records.findIndex(x=>x.id===record.id);
   if(index<0)records.push(record);else records[index]=record;
-  const candidate={...S,[field]:records},error=svValidate(candidate);
+  const changed={...related,[field]:records},error=svValidate({...S,...changed});
   if(error)return error;
-  S[field]=records;persist();renderLedgerAccountChoice();renderSavings();return '';
+  Object.assign(S,changed);persist();renderLedgerAccountChoice();renderSavings();return '';
 }
 function svAccountOptionLabel(account){
   return account.name+(svIsCredit(account)?' · 信用卡':'')+(account.archived?'（已停用）':'');
@@ -3886,39 +3889,71 @@ function svDialog(title,body,formId){
   $('#svDialogTitle').focus({preventScroll:true});
   return finish;
 }
-function svOpenAccount(id){
+function svOpenAccount(id,presetKind){
   if(!requireVisibleAmounts('管理账户'))return;
   const original=svAccounts().find(a=>a.id===id),snapshot=stableNote(original);
   const canChangeType=()=>!id||(fmPocket()?.id!==id&&!svEntries().some(e=>e.accountId===id||e.toAccountId===id)&&!svLinkedBills().some(e=>e.accountId===id));
-  const credit=svIsCredit(original);
-  const finish=svDialog(original?'编辑账户':'添加账户',`
-    <label>账户名称<input id="svAccountName" maxlength="24" placeholder="例如工资卡" value="${esc(original?.name||'')}" required></label>
+  const fromLedger=presetKind==='credit';
+  const credit=svIsCredit(original)||fromLedger;
+  const debts=id?[]:svPositions().filter(position=>position.kind==='liability'&&typeof position.name==='string'&&position.name.trim()&&
+    Number.isSafeInteger(position.amountCents)&&position.amountCents>=0&&position.amountCents<=SV_LIMIT);
+  const finish=svDialog(original?'编辑账户':fromLedger?'添加信用卡':'添加账户',`
+    <label>账户名称<input id="svAccountName" maxlength="24" placeholder="${credit?'例如招行信用卡':'例如工资卡'}" value="${esc(original?.name||'')}" required></label>
     <label>账户类型<select id="svAccountKind"${canChangeType()?'':' disabled'}><option value="cash">资金账户</option><option value="credit"${credit?' selected':''}>信用卡</option></select></label>
     <label>起始日期<input id="svOpeningDate" type="date" min="1900-01-01" max="${todayStr()}" value="${original?.openingDate||todayStr()}" required></label>
     <label><span id="svOpeningLabel"></span><input id="svOpeningAmount" inputmode="decimal" maxlength="18" value="${original?Math.abs(original.openingCents/100):'0'}" required></label>
+    ${debts.length?`<label class="sv-full" id="svAccountDebtField" hidden>使用已有负债
+      <select id="svAccountDebt"><option value="">手动填写欠款</option>${debts.map(debt=>`<option value="${esc(debt.id)}">${esc(debt.name)} · ${svMoney(debt.amountCents)}</option>`).join('')}</select></label>`:''}
     <p class="sv-hint sv-full" id="svOpeningHelp"></p>`,'svAccountForm');
+  const nameInput=$('#svAccountName'),amountInput=$('#svOpeningAmount'),debtSelect=$('#svAccountDebt');
+  let openingDraft=amountInput.value,chosenDebt;
   const updateOpeningHelp=()=>{
     const isCredit=$('#svAccountKind').value==='credit';
+    const previousDebt=chosenDebt;
+    chosenDebt=isCredit&&debtSelect?debts.find(debt=>debt.id===debtSelect.value):undefined;
+    if(debtSelect)$('#svAccountDebtField').hidden=!isCredit;
+    if(chosenDebt){
+      if(!previousDebt)openingDraft=amountInput.value;
+      if(!nameInput.value.trim()||nameInput.value===previousDebt?.name.slice(0,24))nameInput.value=chosenDebt.name.slice(0,24);
+      amountInput.value=chosenDebt.amountCents/100;
+    }else if(previousDebt)amountInput.value=openingDraft;
+    amountInput.readOnly=!!chosenDebt;
     $('#svOpeningLabel').textContent=isCredit?'起始欠款（元）':'起始余额（元）';
-    $('#svOpeningHelp').textContent=isCredit?'填开始记录前已经欠的金额。若同一张卡已在负债明细中登记，可把旧负债关联到此账户。':'起始余额是开始记录前已有的钱。已记录的账户沿用原值，后续通过账单或账户流水更新。';
+    $('#svOpeningHelp').textContent=chosenDebt?'保存后，原负债会关联到这张卡，欠款只汇总一次。':isCredit?'填开始记录前已欠的金额。若负债明细里已有这张卡的欠款，可在这里选用。':'起始余额是开始记录前已有的钱。已记录的账户沿用原值，后续通过账单或账户流水更新。';
   };
-  $('#svAccountKind').onchange=updateOpeningHelp;updateOpeningHelp();
+  $('#svAccountKind').onchange=updateOpeningHelp;
+  if(debtSelect)debtSelect.onchange=updateOpeningHelp;
+  updateOpeningHelp();
   $('#svAccountForm').onsubmit=event=>{
     event.preventDefault();if(!requireVisibleAmounts('保存账户'))return;
     const current=svAccounts().find(a=>a.id===id);
     if(stableNote(current)!==snapshot){$('#svDialogError').textContent='账户已在其他地方更新，请重新打开后编辑。';return;}
-    const name=$('#svAccountName').value.trim(),baseCents=svCents($('#svOpeningAmount').value,true);
+    const name=nameInput.value.trim(),baseCents=chosenDebt?.amountCents??svCents(amountInput.value,true);
     const isCredit=$('#svAccountKind').value==='credit';
+    const debt=chosenDebt&&svPositions().find(position=>position.id===chosenDebt.id);
     let error=!name?'请输入账户名称。':baseCents===null?'起始金额需为非负金额，最多两位小数。':'';
     if(!error&&isCredit!==svIsCredit(current)&&!canChangeType())error='此账户已有流水或是小荷包，请用单独的账户记录信用卡。';
     if(!error&&svAccounts().some(a=>a.id!==id&&a.name===name))error='已有同名账户，请换一个名称。';
+    if(!error&&chosenDebt&&stableNote(debt)!==stableNote(chosenDebt))error='这笔负债已更新，请重新打开后选择。';
+    // 同一笔负债在两台设备上同时用于建卡时，合并为同一个账户。
+    const accountId=current?.id||(debt?'credit-from-'+debt.id:uid());
+    if(!error&&debt&&svAccounts().some(account=>account.id===accountId))error='这笔负债已有对应的信用卡账户，请在负债明细中核对关联。';
+    const selectNew=!error&&fromLedger&&isCredit&&curType==='expense';
     if(!error){
-      const record={...current,id:current?.id||uid(),name,openingCents:isCredit?-baseCents:baseCents,openingDate:$('#svOpeningDate').value,updatedAt:timeEditTimestamp(current)};
+      const record={...current,id:accountId,name,openingCents:isCredit?-baseCents:baseCents,openingDate:$('#svOpeningDate').value,updatedAt:timeEditTimestamp(debt||current)};
       if(isCredit)record.kind='credit';else delete record.kind;
-      error=svPut('savingsAccounts',record);
+      const related=debt?{savingsPositions:svRecords('savingsPositions').map(position=>position.id===debt.id?
+        {...debt,kind:'linked',accountId:record.id,updatedAt:timeEditTimestamp(debt)}:position)}:{};
+      error=svPut('savingsAccounts',record,related);
+      if(!error&&selectNew){
+        ledgerAccountChoices.expense=record.id;
+        renderLedgerAccountChoice();
+      }
     }
     if(error){$('#svDialogError').textContent=error;return;}
-    finish();toast('账户已保存');
+    finish();
+    if(selectNew)$('#ledgerAccount input:checked')?.focus({preventScroll:true});
+    toast('账户已保存');
   };
 }
 function svEditEntry(id){
@@ -4958,10 +4993,11 @@ function renderFlow(){
   const listHtml=pageList.length?pageList.map(x=>{
     const meta=catMeta(x.type,x.category);
     const account=x.accountId?svAccounts().find(a=>a.id===x.accountId)?.name:'';
-    return `<div class="flow-item" data-id="${x.id}" style="border-left-color:${meta[1]}">
+    return `<div class="flow-item" data-id="${esc(x.id)}" style="border-left-color:${meta[1]}">
       <div class="f-ic" style="background:${hexA(meta[1],.14)};color:${meta[1]}">${catIcon(meta[2])}</div>
       <div class="f-main"><div class="f-cat"><span class="f-tag" style="background:${hexA(meta[1],.12)};color:${meta[1]}">${esc(x.category)}</span>${x.note?' <span style="font-weight:400;color:var(--text-2)">· '+esc(ledgerNoteDisplay(x.note))+'</span>':''}</div><div class="f-date">${x.date}${account?' · '+esc(maskMoneyText(account)):''}</div></div>
       <div class="f-amt" style="color:${x.type==='income'?'var(--income)':'var(--expense)'}">${x.type==='income'?'+':'-'}${money(x.amount)}</div>
+      ${x.id?rowActionButton('edit','data-flow-edit',x.id,'编辑账单'):''}
     </div>`;
   }).join(''):'<div class="empty-mini">所选条件下暂无账单记录</div>';
   const pagerHtml=list.length>FLOW_PAGE_SIZE?`<div class="row-between" style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)">
@@ -4972,6 +5008,10 @@ function renderFlow(){
     </div>
   </div>`:'';
   $('#flowList').innerHTML=listHtml+pagerHtml;
+  $$('#flowList [data-flow-edit]').forEach(button=>{
+    button.disabled=amountPrivacy;
+    button.onclick=()=>editLedgerById(button.dataset.flowEdit);
+  });
   const fp=$('#flowPrev'),fn=$('#flowNext');
   if(fp)fp.onclick=()=>{if(flowPage>1){flowPage--;renderFlow()}};
   if(fn)fn.onclick=()=>{if(flowPage<totalPages){flowPage++;renderFlow()}};
