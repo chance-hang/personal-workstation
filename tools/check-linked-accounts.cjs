@@ -347,6 +347,7 @@ async function sync(page,direction){
   await p.locator('#svDialogCancel').click();
   assert.equal(await p.evaluate(()=>svPositions()[0].kind),'liability');
   assert.equal((await wealth(p)).debt,12345);
+  const beforeSetup=await p.evaluate(()=>structuredClone(S));
   await addCredit.click();
   await p.locator('#svAccountDebt').selectOption('existing-card-debt');
   await save(p,'svAccountForm');
@@ -356,6 +357,25 @@ async function sync(page,direction){
   assert.equal(await money(p,newCard),-12345);
   assert.deepEqual(await p.evaluate(()=>[svPositions()[0].kind,svPositions()[0].accountId]),['linked',newCard]);
   assert.equal((await wealth(p)).debt,12345);
+  const firstSetup=await p.evaluate(()=>structuredClone(S));
+  await p.evaluate(state=>{clearTimeout(syncTimer);S=state;renderAll();},beforeSetup);
+  await addCredit.click();
+  await p.locator('#svAccountDebt').selectOption('existing-card-debt');
+  await p.locator('#svAccountName').fill('另一设备编辑的信用卡名称');
+  await save(p,'svAccountForm');
+  const secondSetup=await p.evaluate(()=>structuredClone(S));
+  const mergedNames=[];
+  for(const [local,remote] of [[firstSetup,secondSetup],[secondSetup,firstSetup]]){
+    const merged=await p.evaluate(({local,remote})=>{
+      clearTimeout(syncTimer);S=local;
+      mergeState(remote);renderAll();
+      return {accounts:svAccounts().map(a=>a.id),debt:svWealth().debt,link:svPositions()[0].accountId,name:svAccounts()[0].name};
+    },{local,remote});
+    assert.deepEqual({...merged,name:undefined},{accounts:[newCard],debt:12345,link:newCard,name:undefined});
+    mergedNames.push(merged.name);
+  }
+  assert.equal(mergedNames[0],mergedNames[1]);
+  pass('separate devices setting up a card from the same debt converge on one account in both merge directions');
 
   await view(p,'analysis');
   const billEdit=p.locator('#flowList [data-flow-edit=old-credit-bill]');
